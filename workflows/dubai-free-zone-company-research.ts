@@ -12,7 +12,7 @@ const defineZones = node({
   version: 3.4,
   config: {
     name: 'Define Dubai Free Zones',
-    position: [220, 300],
+    position: [200, 300],
     parameters: {
       mode: 'manual',
       includeOtherFields: false,
@@ -36,7 +36,7 @@ const splitZones = node({
   version: 1,
   config: {
     name: 'Split Zones',
-    position: [440, 300],
+    position: [400, 300],
     parameters: {
       fieldToSplitOut: 'zones',
       include: 'noOtherFields',
@@ -51,7 +51,7 @@ const openAiModel = languageModel({
   version: 1.3,
   config: {
     name: 'GPT-5.4 Mini Web Search',
-    position: [620, 540],
+    position: [880, 600],
     parameters: {
       model: { __rl: true, mode: 'list', value: 'gpt-5.4-mini', cachedResultName: 'gpt-5.4-mini' },
       responsesApiEnabled: true,
@@ -73,93 +73,75 @@ const openAiModel = languageModel({
   }
 });
 
-const companySchema = outputParser({
+const discoverySchema = outputParser({
   type: '@n8n/n8n-nodes-langchain.outputParserStructured',
   version: 1.3,
   config: {
-    name: 'Company Records Schema',
-    position: [820, 540],
+    name: 'Discovered Companies Schema',
+    position: [620, 600],
     parameters: {
       schemaType: 'fromJson',
-      jsonSchemaExample: '{\n  "companies": [\n    {\n      "company_name": "Example Trading DMCC",\n      "website": "https://example.ae",\n      "email": "careers@example.ae",\n      "industry": "Commodities Trading",\n      "free_zone": "DMCC - Dubai Multi Commodities Centre",\n      "point_of_contact": "Jane Doe, HR Manager",\n      "contact_number": "+971 4 000 0000"\n    }\n  ]\n}',
+      jsonSchemaExample: '{\n  "companies": [\n    {\n      "company_name": "Example Trading DMCC",\n      "website": "https://example.ae",\n      "free_zone": "DMCC - Dubai Multi Commodities Centre"\n    }\n  ]\n}',
       autoFix: true
     },
     subnodes: { model: openAiModel }
   }
 });
 
-const researchAgent = node({
+const discoverCompanies = node({
   type: '@n8n/n8n-nodes-langchain.agent',
   version: 3.1,
   config: {
-    name: 'Research Free Zone Companies',
-    position: [680, 300],
+    name: 'Discover Companies In Zone',
+    position: [620, 300],
     retryOnFail: true,
     maxTries: 3,
     waitBetweenTries: 5000,
     parameters: {
       promptType: 'define',
-      text: expr('Find 2 companies registered in this Dubai Free Zone: {{ $json.free_zone }}\n\nUse the web search tool for every company. Return only companies whose affiliation with this exact free zone you have verified from a real source.'),
+      text: expr('List 10 companies registered in this Dubai Free Zone: {{ $json.free_zone }}'),
       hasOutputParser: true,
       options: {
-        maxIterations: 30,
-        batching: { batchSize: 1, delayBetweenBatches: 15000 },
-        systemMessage: 'You are a B2B research analyst who compiles verified company records for Dubai Free Zone companies. You have a web search tool. You MUST use it. You must never answer from memory alone.\n\n' +
-          '## SCOPE — Dubai Free Zones only\n' +
+        maxIterations: 10,
+        batching: { batchSize: 1, delayBetweenBatches: 5000 },
+        systemMessage: 'You identify companies registered in Dubai Free Zones. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
+          'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
+          '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
           'REJECT companies from Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, any other emirate, or any other country.\n' +
           'REJECT Dubai mainland companies licensed by the DED (Department of Economy and Tourism). Free zone registration only.\n' +
-          'If you cannot verify that a company belongs to the named Dubai Free Zone, OMIT that company entirely. Do not include it with a guess.\n\n' +
-          '## FIELDS — collect all seven for every company\n' +
-          'company_name: The full official registered company name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when it is part of the name.\n' +
-          'website: The official company website. Full URL including https://. Not a directory listing, not a LinkedIn page, not an aggregator profile.\n' +
-          'industry: The primary industry or business activity of the company.\n' +
-          'free_zone: Copy the free zone name from the user message EXACTLY as written. Do not abbreviate, expand, or reword it.\n' +
-          'email: A publicly listed business email. Prefer, in this order: HR, recruitment, careers, hiring, then a general business address such as info@ or contact@.\n' +
-          'point_of_contact: A publicly listed person. Prefer, in this order: HR, Recruitment, Talent Acquisition, or Hiring staff; then Founder, CEO, Director, or Manager; then any other relevant named company contact. Format as "Name, Role" when both are known.\n' +
-          'contact_number: A publicly listed company or relevant contact phone number, in international format where possible.\n\n' +
-          '## FIELD PRIORITY\n' +
-          "email is the most valuable field. Records that reach the end of this pipeline without a real email address are DISCARDED and never saved, so spend your research effort on finding and confirming a genuine published email for every company. Check the company's contact page, careers page, about page, and footer.\n" +
-          'This is a reason to research email thoroughly. It is NEVER a reason to invent one. An invented email is far worse than a discarded record.\n' +
-          'contact_number is OPTIONAL. Not Found is completely acceptable there and the record will still be saved.\n\n' +
-          '## ANTI-FABRICATION — this is the most important rule\n' +
-          'NEVER invent, guess, infer, extrapolate, or construct any value. Every value you output must have been read from a real source you actually visited.\n' +
-          'You are specifically FORBIDDEN from building an email address out of a pattern. If the domain is example.ae, you must NOT output info@example.ae, hr@example.ae, or careers@example.ae unless you actually saw that exact address published.\n' +
-          'You are specifically FORBIDDEN from guessing a phone number from a country or area code.\n' +
-          'You are specifically FORBIDDEN from naming a person whose connection to the company you did not see stated.\n' +
-          'When a field cannot be verified, output the exact string: Not Found\n' +
-          'A record full of Not Found values is a CORRECT and GOOD answer. A record with a plausible-looking invented email is a FAILURE. Never trade accuracy for completeness.\n\n' +
-          '## OTHER RULES\n' +
-          'Prefer the official company website. Free zone member directories are acceptable for confirming free zone affiliation.\n' +
-          'Do not include the same company twice. Check company_name against the records you have already produced.\n' +
-          'Return the number of companies asked for in the user message. If you can only verify fewer, return fewer. Never pad the list with unverified entries to reach the target.\n' +
-          'Work efficiently. Do not spend unbounded effort on any single company \u2014 if a field resists verification after a reasonable search, record Not Found and move on.\n' +
-          'Return only the structured data in the required schema. No commentary, no markdown, no extra fields, no source citations in the field values.'
+          'Verify the free zone affiliation against the company website or the free zone member directory. If you cannot verify it, OMIT the company.\n\n' +
+          '## FIELDS\n' +
+          'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
+          'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
+          'free_zone: Copy the free zone name from the user message EXACTLY as written. Do not abbreviate, expand, or reword it.\n\n' +
+          '## RULES\n' +
+          'NEVER invent a company, a name, or a website. Every entry must come from a real source you visited.\n' +
+          'Do not return the same company twice.\n' +
+          'Favour ordinary small and mid-sized businesses over the most famous names in the zone, and vary the industries you return.\n' +
+          'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n' +
+          'Return only the structured data in the required schema.'
       }
     },
-    subnodes: { model: openAiModel, outputParser: companySchema }
+    subnodes: { model: openAiModel, outputParser: discoverySchema }
   },
   output: [{
     output: {
       companies: [{
         company_name: 'Example Trading DMCC',
         website: 'https://example.ae',
-        email: 'careers@example.ae',
-        industry: 'Commodities Trading',
-        free_zone: 'DMCC - Dubai Multi Commodities Centre',
-        point_of_contact: 'Jane Doe, HR Manager',
-        contact_number: '+971 4 000 0000'
+        free_zone: 'DMCC - Dubai Multi Commodities Centre'
       }]
     }
   }]
 });
 
-const splitCompanies = node({
+const splitDiscovered = node({
   type: 'n8n-nodes-base.splitOut',
   version: 1,
   config: {
-    name: 'Split Companies Into Rows',
-    position: [940, 300],
+    name: 'Split Discovered Companies',
+    position: [860, 300],
     parameters: {
       fieldToSplitOut: 'output.companies',
       include: 'noOtherFields',
@@ -169,25 +151,96 @@ const splitCompanies = node({
   output: [{
     company_name: 'Example Trading DMCC',
     website: 'https://example.ae',
-    email: 'careers@example.ae',
-    industry: 'Commodities Trading',
-    free_zone: 'DMCC - Dubai Multi Commodities Centre',
-    point_of_contact: 'Jane Doe, HR Manager',
-    contact_number: '+971 4 000 0000'
+    free_zone: 'DMCC - Dubai Multi Commodities Centre'
   }]
 });
 
-const dropDuplicates = node({
-  type: 'n8n-nodes-base.removeDuplicates',
-  version: 2,
+const contactSchema = outputParser({
+  type: '@n8n/n8n-nodes-langchain.outputParserStructured',
+  version: 1.3,
   config: {
-    name: 'Drop Companies Already Saved',
-    position: [1380, 300],
+    name: 'Company Contact Schema',
+    position: [1140, 600],
     parameters: {
-      operation: 'removeItemsSeenInPreviousExecutions',
-      logic: 'removeItemsWithAlreadySeenKeyValues',
-      dedupeValue: expr('{{ $json.email.trim().toLowerCase().split("@")[1] }}'),
-      options: { scope: 'workflow', historySize: 10000 }
+      schemaType: 'fromJson',
+      jsonSchemaExample: '{\n  "email": "careers@example.ae",\n  "industry": "Commodities Trading",\n  "point_of_contact": "Jane Doe, HR Manager",\n  "contact_number": "+971 4 000 0000"\n}',
+      autoFix: true
+    },
+    subnodes: { model: openAiModel }
+  }
+});
+
+const enrichCompany = node({
+  type: '@n8n/n8n-nodes-langchain.agent',
+  version: 3.1,
+  config: {
+    name: 'Enrich Company Contacts',
+    position: [1080, 300],
+    retryOnFail: true,
+    maxTries: 2,
+    waitBetweenTries: 5000,
+    onError: 'continueRegularOutput',
+    parameters: {
+      promptType: 'define',
+      text: expr('Company: {{ $json.company_name }}\nWebsite: {{ $json.website }}\nFree zone: {{ $json.free_zone }}\n\nFind the business email, primary industry, a named point of contact, and a phone number for this one company.'),
+      hasOutputParser: true,
+      options: {
+        maxIterations: 10,
+        batching: { batchSize: 1, delayBetweenBatches: 3000 },
+        systemMessage: 'You find published contact details for one specific company. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
+          'You are given one company, already verified as registered in a Dubai Free Zone. Do not question that. Do not research other companies. Find contact details for this company only.\n\n' +
+          '## FIELDS\n' +
+          'email: A publicly listed business email for this company. Prefer, in this order: HR, recruitment, careers, hiring, then a general business address.\n' +
+          'industry: The primary industry or business activity.\n' +
+          'point_of_contact: A publicly listed person. Prefer HR, Recruitment, Talent Acquisition or Hiring staff; then Founder, CEO, Director or Manager; then any other named company contact. Format as "Name, Role" when both are known.\n' +
+          'contact_number: A publicly listed phone number, in international format where possible.\n\n' +
+          '## WHERE TO LOOK\n' +
+          "Check the company website's contact page, careers page, about page, team page, and footer. These are where published addresses actually live.\n" +
+          '\n' +
+          '## ANTI-FABRICATION — the most important rule\n' +
+          'NEVER invent, guess, infer, extrapolate, or construct any value. Every value must have been read from a real source you actually visited.\n' +
+          'You are specifically FORBIDDEN from building an email address out of a pattern. If the domain is example.ae, you must NOT output info@example.ae, hr@example.ae, or careers@example.ae unless you actually saw that exact address published on a real page.\n' +
+          'You are specifically FORBIDDEN from guessing a phone number from a country or area code.\n' +
+          'You are specifically FORBIDDEN from naming a person whose connection to this company you did not see stated.\n' +
+          'When a field cannot be verified, output the exact string: Not Found\n' +
+          'Returning Not Found is a CORRECT and GOOD answer. A plausible-looking invented email is a FAILURE. Never trade accuracy for completeness.\n\n' +
+          '## EFFICIENCY\n' +
+          'Do not spend unbounded effort. If a field resists verification after a reasonable search, record Not Found and finish.\n' +
+          'Return only the structured data in the required schema. No commentary, no markdown, no source citations in the field values.'
+      }
+    },
+    subnodes: { model: openAiModel, outputParser: contactSchema }
+  },
+  output: [{
+    output: {
+      email: 'careers@example.ae',
+      industry: 'Commodities Trading',
+      point_of_contact: 'Jane Doe, HR Manager',
+      contact_number: '+971 4 000 0000'
+    }
+  }]
+});
+
+const flattenRecord = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Flatten Company Record',
+    position: [1320, 300],
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [
+          { id: 'company_name', name: 'company_name', type: 'string', value: expr('{{ $("Split Discovered Companies").item.json.company_name }}') },
+          { id: 'website', name: 'website', type: 'string', value: expr('{{ $("Split Discovered Companies").item.json.website }}') },
+          { id: 'email', name: 'email', type: 'string', value: expr('{{ $json.output?.email }}') },
+          { id: 'industry', name: 'industry', type: 'string', value: expr('{{ $json.output?.industry }}') },
+          { id: 'free_zone', name: 'free_zone', type: 'string', value: expr('{{ $("Split Discovered Companies").item.json.free_zone }}') },
+          { id: 'point_of_contact', name: 'point_of_contact', type: 'string', value: expr('{{ $json.output?.point_of_contact }}') },
+          { id: 'contact_number', name: 'contact_number', type: 'string', value: expr('{{ $json.output?.contact_number }}') }
+        ]
+      }
     }
   },
   output: [{
@@ -206,7 +259,7 @@ const requireEmail = node({
   version: 2.3,
   config: {
     name: 'Require Verified Email',
-    position: [1160, 300],
+    position: [1520, 300],
     parameters: {
       conditions: {
         options: { caseSensitive: false, leftValue: '', typeValidation: 'loose', version: 2 },
@@ -217,7 +270,31 @@ const requireEmail = node({
         combinator: 'and'
       },
       looseTypeValidation: true,
-      options: { ignoreCase: true, looseTypeValidation: true }
+      options: { ignoreCase: true }
+    }
+  },
+  output: [{
+    company_name: 'Example Trading DMCC',
+    website: 'https://example.ae',
+    email: 'careers@example.ae',
+    industry: 'Commodities Trading',
+    free_zone: 'DMCC - Dubai Multi Commodities Centre',
+    point_of_contact: 'Jane Doe, HR Manager',
+    contact_number: 'Not Found'
+  }]
+});
+
+const dropDuplicates = node({
+  type: 'n8n-nodes-base.removeDuplicates',
+  version: 2,
+  config: {
+    name: 'Drop Companies Already Saved',
+    position: [1720, 300],
+    parameters: {
+      operation: 'removeItemsSeenInPreviousExecutions',
+      logic: 'removeItemsWithAlreadySeenKeyValues',
+      dedupeValue: expr('{{ $json.email.trim().toLowerCase().split("@")[1] }}'),
+      options: { scope: 'workflow', historySize: 10000 }
     }
   },
   output: [{
@@ -236,7 +313,7 @@ const appendToSheet = node({
   version: 4.7,
   config: {
     name: 'Append Companies To Sheet',
-    position: [1600, 300],
+    position: [1920, 300],
     parameters: {
       resource: 'sheet',
       operation: 'append',
@@ -263,17 +340,19 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\nTarget sheet is already wired up: **Dubai Free Zone Companies** \u2192 `Companies` tab, headers written. Nothing to pick.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address. `contact_number` may be `Not Found` and will still be saved.\n\n**Dedup keys on the email domain**, not the company name, so `Acme Trading DMCC` and `Acme Trading (DMCC)` are correctly seen as one company. It runs *after* the email filter on purpose: only rows that actually reach the sheet get recorded as processed. Two subsidiaries sharing one group domain will collapse into a single row \u2014 accepted tradeoff.\n\nTo test cheaply, edit **Define Dubai Free Zones** and cut the list to a single zone. The full run is 11 zones \u00d7 ~10 companies and costs OpenAI web-search tokens.',
+  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\nTo test cheaply, cut **Define Dubai Free Zones** to one zone and lower the count in `Discover Companies In Zone`.',
   [appendToSheet],
-  { color: 4, position: [0, -20], width: 720, height: 320 }
+  { color: 4, position: [0, -40], width: 760, height: 340 }
 );
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
   .add(startTrigger)
   .to(defineZones)
   .to(splitZones)
-  .to(researchAgent)
-  .to(splitCompanies)
+  .to(discoverCompanies)
+  .to(splitDiscovered)
+  .to(enrichCompany)
+  .to(flattenRecord)
   .to(requireEmail)
   .to(dropDuplicates)
   .to(appendToSheet)
