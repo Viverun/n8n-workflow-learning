@@ -109,7 +109,7 @@ const discoverCompanies = node({
     name: 'Discover Companies In Zone',
     position: [760, 300],
     retryOnFail: true,
-    maxTries: 3,
+    maxTries: 2,
     waitBetweenTries: 5000,
     parameters: {
       promptType: 'define',
@@ -117,7 +117,7 @@ const discoverCompanies = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 5000 },
+        batching: { batchSize: 1, delayBetweenBatches: 20000 },
         systemMessage: 'You identify companies registered in Dubai Free Zones. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
           '## SCOPE\n' +
@@ -203,7 +203,7 @@ const enrichCompany = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 3000 },
+        batching: { batchSize: 1, delayBetweenBatches: 20000 },
         systemMessage: 'You find published contact details for one specific company. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'You are given one company, already verified as registered in a Dubai Free Zone. Do not question that. Do not research other companies. Find contact details for this company only.\n\n' +
           '## FIELDS\n' +
