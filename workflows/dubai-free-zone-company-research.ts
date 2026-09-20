@@ -57,7 +57,7 @@ const openAiModel = languageModel({
       responsesApiEnabled: true,
       builtInTools: {
         webSearch: {
-          searchContextSize: 'high',
+          searchContextSize: 'low',
           country: 'AE',
           city: 'Dubai',
           region: 'Dubai'
@@ -65,8 +65,8 @@ const openAiModel = languageModel({
       },
       options: {
         reasoningEffort: 'medium',
-        maxRetries: 3,
-        timeout: 180000
+        maxRetries: 0,
+        timeout: 600000
       }
     },
     credentials: { openAiApi: { id: 'LcSKl7EB0pYld3oq', name: 'OpenAI account' } }
@@ -94,13 +94,16 @@ const researchAgent = node({
   config: {
     name: 'Research Free Zone Companies',
     position: [680, 300],
+    retryOnFail: true,
+    maxTries: 3,
+    waitBetweenTries: 5000,
     parameters: {
       promptType: 'define',
-      text: expr('Find 10 companies registered in this Dubai Free Zone: {{ $json.free_zone }}\n\nUse the web search tool for every company. Return only companies whose affiliation with this exact free zone you have verified from a real source.'),
+      text: expr('Find 2 companies registered in this Dubai Free Zone: {{ $json.free_zone }}\n\nUse the web search tool for every company. Return only companies whose affiliation with this exact free zone you have verified from a real source.'),
       hasOutputParser: true,
       options: {
         maxIterations: 30,
-        batching: { batchSize: 1, delayBetweenBatches: 2000 },
+        batching: { batchSize: 1, delayBetweenBatches: 15000 },
         systemMessage: 'You are a B2B research analyst who compiles verified company records for Dubai Free Zone companies. You have a web search tool. You MUST use it. You must never answer from memory alone.\n\n' +
           '## SCOPE — Dubai Free Zones only\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
@@ -129,7 +132,8 @@ const researchAgent = node({
           '## OTHER RULES\n' +
           'Prefer the official company website. Free zone member directories are acceptable for confirming free zone affiliation.\n' +
           'Do not include the same company twice. Check company_name against the records you have already produced.\n' +
-          'Aim for 10 companies. If you can only verify fewer, return fewer. Never pad the list with unverified entries to reach the target.\n' +
+          'Return the number of companies asked for in the user message. If you can only verify fewer, return fewer. Never pad the list with unverified entries to reach the target.\n' +
+          'Work efficiently. Do not spend unbounded effort on any single company \u2014 if a field resists verification after a reasonable search, record Not Found and move on.\n' +
           'Return only the structured data in the required schema. No commentary, no markdown, no extra fields, no source citations in the field values.'
       }
     },
