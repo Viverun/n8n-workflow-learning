@@ -255,7 +255,7 @@ const appendToSheet = node({
           { id: 'contact_number', displayName: 'contact_number', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
-      options: { cellFormat: 'USER_ENTERED', handlingExtraData: 'insertInNewColumn' }
+      options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }
     },
     credentials: { googleSheetsOAuth2Api: { id: 'OH1NGutCEKtPnrEt', name: 'Google Sheets account' } }
   },
