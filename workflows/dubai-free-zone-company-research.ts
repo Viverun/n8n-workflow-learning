@@ -236,8 +236,8 @@ const appendToSheet = node({
     parameters: {
       resource: 'sheet',
       operation: 'append',
-      documentId: { __rl: true, mode: 'list', value: '', cachedResultName: 'Dubai Free Zone Companies' },
-      sheetName: { __rl: true, mode: 'list', value: '', cachedResultName: 'Sheet1' },
+      documentId: { __rl: true, mode: 'list', value: '137eRLDfGQGix-DeDY768ydDJycjUTgRNQzxDu0G70eA', cachedResultName: 'Dubai Free Zone Companies', cachedResultUrl: 'https://docs.google.com/spreadsheets/d/137eRLDfGQGix-DeDY768ydDJycjUTgRNQzxDu0G70eA/edit' },
+      sheetName: { __rl: true, mode: 'list', value: '1458845809', cachedResultName: 'Companies', cachedResultUrl: 'https://docs.google.com/spreadsheets/d/137eRLDfGQGix-DeDY768ydDJycjUTgRNQzxDu0G70eA/edit#gid=1458845809' },
       columns: {
         mappingMode: 'autoMapInputData',
         value: {},
@@ -259,9 +259,9 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Setup before first run\n\n1. Open **Append Companies To Sheet** and pick your spreadsheet and tab from the dropdowns.\n2. In that sheet, create a header row with these exact column names:\n\n`company_name` | `website` | `email` | `industry` | `free_zone` | `point_of_contact` | `contact_number`\n\n3. Test with one zone first: edit **Define Dubai Free Zones** and cut the list down to a single entry.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address, so fewer rows reach the sheet than the agent researches. `contact_number` may be `Not Found` and will still be saved.',
+  '## Dubai Free Zone Company Research\n\nTarget sheet is already wired up: **Dubai Free Zone Companies** \u2192 `Companies` tab, headers written. Nothing to pick.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address, so fewer rows reach the sheet than the agent researches. `contact_number` may be `Not Found` and will still be saved.\n\nTo test cheaply, edit **Define Dubai Free Zones** and cut the list down to a single zone before running. The full list is 11 zones \u00d7 ~10 companies, and every run costs OpenAI web-search tokens.\n\nRe-runs never duplicate: `Drop Companies Already Saved` remembers `company_name` across executions.',
   [appendToSheet],
-  { color: 4, position: [0, -20], width: 720, height: 260 }
+  { color: 4, position: [0, -20], width: 720, height: 300 }
 );
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
