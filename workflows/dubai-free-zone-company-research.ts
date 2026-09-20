@@ -178,11 +178,11 @@ const dropDuplicates = node({
   version: 2,
   config: {
     name: 'Drop Companies Already Saved',
-    position: [1160, 300],
+    position: [1380, 300],
     parameters: {
       operation: 'removeItemsSeenInPreviousExecutions',
       logic: 'removeItemsWithAlreadySeenKeyValues',
-      dedupeValue: expr('{{ $json.company_name }}'),
+      dedupeValue: expr('{{ $json.email.trim().toLowerCase().split("@")[1] }}'),
       options: { scope: 'workflow', historySize: 10000 }
     }
   },
@@ -202,7 +202,7 @@ const requireEmail = node({
   version: 2.3,
   config: {
     name: 'Require Verified Email',
-    position: [1380, 300],
+    position: [1160, 300],
     parameters: {
       conditions: {
         options: { caseSensitive: false, leftValue: '', typeValidation: 'loose', version: 2 },
@@ -259,9 +259,9 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\nTarget sheet is already wired up: **Dubai Free Zone Companies** \u2192 `Companies` tab, headers written. Nothing to pick.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address, so fewer rows reach the sheet than the agent researches. `contact_number` may be `Not Found` and will still be saved.\n\nTo test cheaply, edit **Define Dubai Free Zones** and cut the list down to a single zone before running. The full list is 11 zones \u00d7 ~10 companies, and every run costs OpenAI web-search tokens.\n\nRe-runs never duplicate: `Drop Companies Already Saved` remembers `company_name` across executions.',
+  '## Dubai Free Zone Company Research\n\nTarget sheet is already wired up: **Dubai Free Zone Companies** \u2192 `Companies` tab, headers written. Nothing to pick.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address. `contact_number` may be `Not Found` and will still be saved.\n\n**Dedup keys on the email domain**, not the company name, so `Acme Trading DMCC` and `Acme Trading (DMCC)` are correctly seen as one company. It runs *after* the email filter on purpose: only rows that actually reach the sheet get recorded as processed. Two subsidiaries sharing one group domain will collapse into a single row \u2014 accepted tradeoff.\n\nTo test cheaply, edit **Define Dubai Free Zones** and cut the list to a single zone. The full run is 11 zones \u00d7 ~10 companies and costs OpenAI web-search tokens.',
   [appendToSheet],
-  { color: 4, position: [0, -20], width: 720, height: 300 }
+  { color: 4, position: [0, -20], width: 720, height: 320 }
 );
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
@@ -270,7 +270,7 @@ export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Com
   .to(splitZones)
   .to(researchAgent)
   .to(splitCompanies)
-  .to(dropDuplicates)
   .to(requireEmail)
+  .to(dropDuplicates)
   .to(appendToSheet)
   .add(setupNote);
