@@ -115,6 +115,10 @@ const researchAgent = node({
           'email: A publicly listed business email. Prefer, in this order: HR, recruitment, careers, hiring, then a general business address such as info@ or contact@.\n' +
           'point_of_contact: A publicly listed person. Prefer, in this order: HR, Recruitment, Talent Acquisition, or Hiring staff; then Founder, CEO, Director, or Manager; then any other relevant named company contact. Format as "Name, Role" when both are known.\n' +
           'contact_number: A publicly listed company or relevant contact phone number, in international format where possible.\n\n' +
+          '## FIELD PRIORITY\n' +
+          "email is the most valuable field. Records that reach the end of this pipeline without a real email address are DISCARDED and never saved, so spend your research effort on finding and confirming a genuine published email for every company. Check the company's contact page, careers page, about page, and footer.\n" +
+          'This is a reason to research email thoroughly. It is NEVER a reason to invent one. An invented email is far worse than a discarded record.\n' +
+          'contact_number is OPTIONAL. Not Found is completely acceptable there and the record will still be saved.\n\n' +
           '## ANTI-FABRICATION — this is the most important rule\n' +
           'NEVER invent, guess, infer, extrapolate, or construct any value. Every value you output must have been read from a real source you actually visited.\n' +
           'You are specifically FORBIDDEN from building an email address out of a pattern. If the domain is example.ae, you must NOT output info@example.ae, hr@example.ae, or careers@example.ae unless you actually saw that exact address published.\n' +
@@ -193,12 +197,42 @@ const dropDuplicates = node({
   }]
 });
 
+const requireEmail = node({
+  type: 'n8n-nodes-base.filter',
+  version: 2.3,
+  config: {
+    name: 'Require Verified Email',
+    position: [1380, 300],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: false, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [
+          { id: 'email-present', leftValue: expr('{{ $json.email }}'), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } },
+          { id: 'email-looks-real', leftValue: expr('{{ $json.email }}'), rightValue: '@', operator: { type: 'string', operation: 'contains' } }
+        ],
+        combinator: 'and'
+      },
+      looseTypeValidation: true,
+      options: { ignoreCase: true, looseTypeValidation: true }
+    }
+  },
+  output: [{
+    company_name: 'Example Trading DMCC',
+    website: 'https://example.ae',
+    email: 'careers@example.ae',
+    industry: 'Commodities Trading',
+    free_zone: 'DMCC - Dubai Multi Commodities Centre',
+    point_of_contact: 'Jane Doe, HR Manager',
+    contact_number: 'Not Found'
+  }]
+});
+
 const appendToSheet = node({
   type: 'n8n-nodes-base.googleSheets',
   version: 4.7,
   config: {
     name: 'Append Companies To Sheet',
-    position: [1380, 300],
+    position: [1600, 300],
     parameters: {
       resource: 'sheet',
       operation: 'append',
@@ -225,7 +259,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Setup before first run\n\n1. Open **Append Companies To Sheet** and pick your spreadsheet and tab from the dropdowns.\n2. In that sheet, create a header row with these exact column names:\n\n`company_name` | `website` | `email` | `industry` | `free_zone` | `point_of_contact` | `contact_number`\n\n3. Test with one zone first: edit **Define Dubai Free Zones** and cut the list down to a single entry.\n\n**Expect `Not Found` values.** Most free zone companies do not publish named HR contacts. Blank-looking results are the anti-fabrication rules working, not a bug.',
+  '## Setup before first run\n\n1. Open **Append Companies To Sheet** and pick your spreadsheet and tab from the dropdowns.\n2. In that sheet, create a header row with these exact column names:\n\n`company_name` | `website` | `email` | `industry` | `free_zone` | `point_of_contact` | `contact_number`\n\n3. Test with one zone first: edit **Define Dubai Free Zones** and cut the list down to a single entry.\n\n**Email is required, phone is not.** `Require Verified Email` drops any company without a real email address, so fewer rows reach the sheet than the agent researches. `contact_number` may be `Not Found` and will still be saved.',
   [appendToSheet],
   { color: 4, position: [0, -20], width: 720, height: 260 }
 );
@@ -237,5 +271,6 @@ export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Com
   .to(researchAgent)
   .to(splitCompanies)
   .to(dropDuplicates)
+  .to(requireEmail)
   .to(appendToSheet)
   .add(setupNote);
