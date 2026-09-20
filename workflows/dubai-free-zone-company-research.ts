@@ -7,11 +7,11 @@ const startTrigger = trigger({
   output: [{}]
 });
 
-const defineZones = node({
+const defineMatrix = node({
   type: 'n8n-nodes-base.set',
   version: 3.4,
   config: {
-    name: 'Define Dubai Free Zones',
+    name: 'Define Zone And Sector Matrix',
     position: [200, 300],
     parameters: {
       mode: 'manual',
@@ -19,31 +19,45 @@ const defineZones = node({
       assignments: {
         assignments: [
           {
-            id: 'zones',
-            name: 'zones',
+            id: 'combos',
+            name: 'combos',
             type: 'array',
-            value: expr('{{ ["DMCC - Dubai Multi Commodities Centre", "JAFZA - Jebel Ali Free Zone", "DIFC - Dubai International Financial Centre", "Dubai Internet City", "Dubai Media City", "DAFZA - Dubai Airport Free Zone", "Dubai Silicon Oasis", "Dubai South", "IFZA - International Free Zone Authority", "Meydan Free Zone", "Dubai Healthcare City"] }}')
+            value: expr('{{ ["DMCC - Dubai Multi Commodities Centre", "JAFZA - Jebel Ali Free Zone", "DIFC - Dubai International Financial Centre", "Dubai Internet City", "Dubai Media City", "DAFZA - Dubai Airport Free Zone", "Dubai Silicon Oasis", "Dubai South", "IFZA - International Free Zone Authority", "Meydan Free Zone", "Dubai Healthcare City"].flatMap(z => ["Retail", "Food and Beverage", "Logistics and Freight", "E-commerce", "Marketing and Advertising", "Technology and Software", "Hospitality and Travel"].map(s => ({ free_zone: z, sector: s }))).sort(() => Math.random() - 0.5) }}')
           }
         ]
       }
     }
   },
-  output: [{ zones: ['DMCC - Dubai Multi Commodities Centre', 'JAFZA - Jebel Ali Free Zone'] }]
+  output: [{ combos: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }] }]
 });
 
-const splitZones = node({
+const splitMatrix = node({
   type: 'n8n-nodes-base.splitOut',
   version: 1,
   config: {
-    name: 'Split Zones',
+    name: 'Split Matrix',
     position: [400, 300],
     parameters: {
-      fieldToSplitOut: 'zones',
+      fieldToSplitOut: 'combos',
       include: 'noOtherFields',
-      options: { destinationFieldName: 'free_zone' }
+      options: {}
     }
   },
-  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre' }]
+  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }]
+});
+
+const limitCombos = node({
+  type: 'n8n-nodes-base.limit',
+  version: 1,
+  config: {
+    name: 'Limit Combos Per Run',
+    position: [560, 300],
+    parameters: {
+      maxItems: 20,
+      keep: 'firstItems'
+    }
+  },
+  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }]
 });
 
 const openAiModel = languageModel({
@@ -93,13 +107,13 @@ const discoverCompanies = node({
   version: 3.1,
   config: {
     name: 'Discover Companies In Zone',
-    position: [620, 300],
+    position: [760, 300],
     retryOnFail: true,
     maxTries: 3,
     waitBetweenTries: 5000,
     parameters: {
       promptType: 'define',
-      text: expr('List 10 companies registered in this Dubai Free Zone: {{ $json.free_zone }}'),
+      text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nList 5 companies operating in this sector that are registered in this Dubai Free Zone.'),
       hasOutputParser: true,
       options: {
         maxIterations: 10,
@@ -115,10 +129,13 @@ const discoverCompanies = node({
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
           'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
           'free_zone: Copy the free zone name from the user message EXACTLY as written. Do not abbreviate, expand, or reword it.\n\n' +
+          '## SECTOR\n' +
+          'The user names a sector. Every company you return must genuinely operate in that sector as its primary business. A company that merely serves that sector does not count.\n' +
+          'EXCLUDE company formation agents, business setup consultancies, corporate services providers, PRO service firms, and accounting or audit practices \u2014 unless the named sector is explicitly one of those. These firms dominate search results for free zone terms and are not what this list is for.\n\n' +
           '## RULES\n' +
           'NEVER invent a company, a name, or a website. Every entry must come from a real source you visited.\n' +
           'Do not return the same company twice.\n' +
-          'Favour ordinary small and mid-sized businesses over the most famous names in the zone, and vary the industries you return.\n' +
+          'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
           'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n' +
           'Return only the structured data in the required schema.'
       }
@@ -347,8 +364,9 @@ const setupNote = sticky(
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
   .add(startTrigger)
-  .to(defineZones)
-  .to(splitZones)
+  .to(defineMatrix)
+  .to(splitMatrix)
+  .to(limitCombos)
   .to(discoverCompanies)
   .to(splitDiscovered)
   .to(enrichCompany)
