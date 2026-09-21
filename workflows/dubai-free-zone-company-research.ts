@@ -70,7 +70,7 @@ const azureModel = languageModel({
       model: 'gpt-5-mini',
       options: {
         timeout: 120000,
-        maxRetries: 1
+        maxRetries: 5
       }
     },
     credentials: { azureOpenAiApi: { id: 'RlTrqkjqaMvSzEIK', name: 'Azure Open AI account' } }
