@@ -22,7 +22,7 @@ const defineMatrix = node({
             id: 'combos',
             name: 'combos',
             type: 'array',
-            value: expr('{{ Object.entries({"DMCC - Dubai Multi Commodities Centre":{"url":"https://dmcc.ae/business-directory","sectors":["E-commerce","Logistics and Freight"]},"JAFZA - Jebel Ali Free Zone":{"url":"https://www.jafza.ae/search/","sectors":["Logistics and Freight","Retail","E-commerce","Food and Beverage"]},"DAFZA - Dubai Airport Free Zone":{"url":null,"sectors":["Logistics and Freight","E-commerce"]},"Dubai South":{"url":"https://dubaisouth.my.salesforce-sites.com/CompanyDirectory","sectors":["Logistics and Freight","E-commerce","Hospitality and Travel"]},"Dubai Internet City":{"url":"https://www.dic.ae/the-community/community-directory","sectors":["Technology and Software","E-commerce"]},"Dubai Media City":{"url":"https://dmc.ae/the-community/community-directory","sectors":["Marketing and Advertising","Technology and Software"]},"Dubai Silicon Oasis":{"url":"https://dso.ae/business-directory","sectors":["Technology and Software","E-commerce"]},"IFZA - International Free Zone Authority":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel","Food and Beverage","Retail"]},"Meydan Free Zone":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel"]} }).flatMap(e => e[1].sectors.map(s => ({ free_zone: e[0], sector: s, directory_url: e[1].url }))).sort(() => Math.random() - 0.5) }}')
+            value: expr('{{ Object.entries({"DMCC - Dubai Multi Commodities Centre":{"url":"https://dmcc.ae/business-directory","sectors":["E-commerce","Logistics and Freight"]},"JAFZA - Jebel Ali Free Zone":{"url":null,"sectors":["Logistics and Freight","Retail","E-commerce","Food and Beverage"]},"DAFZA - Dubai Airport Free Zone":{"url":null,"sectors":["Logistics and Freight","E-commerce"]},"Dubai South":{"url":"https://dubaisouth.my.salesforce-sites.com/CompanyDirectory","sectors":["Logistics and Freight","E-commerce","Hospitality and Travel"]},"Dubai Internet City":{"url":"https://www.dic.ae/the-community/community-directory","sectors":["Technology and Software","E-commerce"]},"Dubai Media City":{"url":"https://dmc.ae/the-community/community-directory","sectors":["Marketing and Advertising","Technology and Software"]},"Dubai Silicon Oasis":{"url":null,"sectors":["Technology and Software","E-commerce"]},"IFZA - International Free Zone Authority":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel","Food and Beverage","Retail"]},"Meydan Free Zone":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel"]} }).flatMap(e => e[1].sectors.map(s => ({ free_zone: e[0], sector: s, directory_url: e[1].url }))).sort(() => Math.random() - 0.5) }}')
           }
         ]
       }
@@ -145,13 +145,16 @@ const discoverCompanies = node({
       text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\nDirectory URL: {{ $json.directory_url || "none available" }}\n\nName 1 company operating in this sector that is registered in this Dubai Free Zone.'),
       hasOutputParser: true,
       options: {
-        maxIterations: 10,
+        maxIterations: 6,
         batching: { batchSize: 1, delayBetweenBatches: 5000 },
         systemMessage: 'You identify companies registered in Dubai Free Zones. You have two tools: Firecrawl Scrape Page (reads the literal content of one exact URL) and Tavily Web Search (searches the web). Never answer from memory alone — every company must come from a page you actually read or a search you actually ran.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
+          '## YOU HAVE ONLY 6 TOOL CALLS TOTAL — THIS IS A HARD LIMIT, NOT A SUGGESTION\n' +
+          'The system will forcibly cut you off with no answer at all if you exceed this. Budget deliberately: 1 directory scrape (if a Directory URL is given) + up to 3 Tavily searches + 1 spare, then you MUST call the final-answer tool. Running out without answering is the single worst outcome — worse than an empty result, worse than a weakly-verified one.\n\n' +
           '## WHERE TO LOOK FIRST\n' +
-          'The user message gives a Directory URL when this free zone publishes its own public company directory. If one is given, your FIRST action must be to scrape it with Firecrawl Scrape Page. Read the result for a company whose listed activity or category matches the requested sector. A company found this way is already verified — the directory listing itself is the proof, so you do not need to search further for it.\n' +
-          'Only fall back to Tavily Web Search if: the Directory URL is "none available", the scrape did not return a usable list of companies (a bare search box with no results, unrendered JavaScript, or a blocked page), or nothing in the directory matches the sector. In that case, use the search budget below.\n\n' +
+          'The user message gives a Directory URL when this free zone publishes its own public company directory. If one is given, scrape it with Firecrawl Scrape Page EXACTLY ONCE as your first action. Read the result for a company whose listed activity or category matches the requested sector.\n' +
+          'If that one scrape does not yield a usable company (empty page, a bare search box with no results, an error or bot-block page such as "update your browser", or placeholder/lorem-ipsum text), the directory is unusable — do NOT scrape it again, do NOT retry the same URL. Immediately move to Tavily Web Search instead.\n' +
+          'If the Directory URL is "none available", skip straight to Tavily Web Search.\n\n' +
           '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
           'REJECT companies from Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, any other emirate, or any other country.\n' +
@@ -159,7 +162,7 @@ const discoverCompanies = node({
           'A free zone entity carries a free zone legal suffix in its registered name: FZCO, FZE, FZ-LLC, FZ LLC, DMCC, DWC-LLC, or Limited. ' +
           'A name ending in plain LLC or L.L.C. is a mainland DED company, not a free zone one. REJECT it.\n' +
           'If the name you found carries no free zone suffix, find the full registered name that does. If there is none, OMIT the company.\n' +
-          'Verify the free zone affiliation against the company website or the free zone member directory. If two searches do not confirm one specific candidate, DROP that candidate and move to a different company — do not keep searching for the same name.\n\n' +
+          'Verify the free zone affiliation against the company website, a directory listing, or a search result that states it. ONE search or scrape that shows this is enough — do not run further searches to increase confidence on the same candidate. If your first attempt on a candidate does not confirm it, do not rephrase and retry that same candidate — move on to a different company immediately.\n\n' +
           '## FIELDS\n' +
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
           'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
@@ -172,11 +175,8 @@ const discoverCompanies = node({
           'Do not return the same company twice.\n' +
           'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
           'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n\n' +
-          '## SEARCH BUDGET — ONE CANDIDATE AT A TIME (Tavily Web Search only; the directory scrape above does not count against this)\n' +
-          'Never spend more than 2 Tavily Web Search calls trying to verify a single candidate company. If it has not verified after 2 searches, ABANDON that name completely and try a different company — do not repeat or rephrase a query for a name that is not working out. Chasing one stubborn candidate is the main way this task fails.\n' +
-          'You have at most 6 Tavily Web Search calls in total for this whole task. Count them as you go. Your 6th search must be your last — after it, whatever you know, immediately call the final-answer tool.\n\n' +
           '## WHEN TO STOP AND GIVE UP\n' +
-          'STOP SEARCHING the moment the budget above tells you to, and call the final-answer tool immediately — with a verified company if you found one, or an EMPTY companies array if not. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure, and it is far better than exhausting your iterations without ever answering. Never keep searching hoping the next query will work.\n\n' +
+          'You have at most 3 Tavily Web Search calls (see the hard limit at the top). One attempt per candidate — if it does not confirm, that candidate is done, try a different one, never rephrase and retry it. The instant you hit 3 Tavily searches, or you are on your 5th tool call overall, STOP and call the final-answer tool immediately — with a verified company if you found one, or an EMPTY companies array if not. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure. Running out of tool calls without ever answering is the only real failure here.\n\n' +
           'Return only the structured data in the required schema.'
       }
     },
