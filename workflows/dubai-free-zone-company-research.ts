@@ -22,13 +22,13 @@ const defineMatrix = node({
             id: 'combos',
             name: 'combos',
             type: 'array',
-            value: expr('{{ Object.entries({"DMCC - Dubai Multi Commodities Centre":["E-commerce","Logistics and Freight"],"JAFZA - Jebel Ali Free Zone":["Logistics and Freight","Retail","E-commerce","Food and Beverage"],"DAFZA - Dubai Airport Free Zone":["Logistics and Freight","E-commerce"],"Dubai South":["Logistics and Freight","E-commerce","Hospitality and Travel"],"Dubai Internet City":["Technology and Software","E-commerce"],"Dubai Media City":["Marketing and Advertising","Technology and Software"],"Dubai Silicon Oasis":["Technology and Software","E-commerce"],"IFZA - International Free Zone Authority":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel","Food and Beverage","Retail"],"Meydan Free Zone":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel"]}).flatMap(e => e[1].map(s => ({ free_zone: e[0], sector: s }))).sort(() => Math.random() - 0.5) }}')
+            value: expr('{{ Object.entries({"DMCC - Dubai Multi Commodities Centre":{"url":"https://dmcc.ae/business-directory","sectors":["E-commerce","Logistics and Freight"]},"JAFZA - Jebel Ali Free Zone":{"url":"https://www.jafza.ae/search/","sectors":["Logistics and Freight","Retail","E-commerce","Food and Beverage"]},"DAFZA - Dubai Airport Free Zone":{"url":null,"sectors":["Logistics and Freight","E-commerce"]},"Dubai South":{"url":"https://dubaisouth.my.salesforce-sites.com/CompanyDirectory","sectors":["Logistics and Freight","E-commerce","Hospitality and Travel"]},"Dubai Internet City":{"url":"https://www.dic.ae/the-community/community-directory","sectors":["Technology and Software","E-commerce"]},"Dubai Media City":{"url":"https://dmc.ae/the-community/community-directory","sectors":["Marketing and Advertising","Technology and Software"]},"Dubai Silicon Oasis":{"url":"https://dso.ae/business-directory","sectors":["Technology and Software","E-commerce"]},"IFZA - International Free Zone Authority":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel","Food and Beverage","Retail"]},"Meydan Free Zone":{"url":null,"sectors":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel"]}}).flatMap(e => e[1].sectors.map(s => ({ free_zone: e[0], sector: s, directory_url: e[1].url }))).sort(() => Math.random() - 0.5) }}')
           }
         ]
       }
     }
   },
-  output: [{ combos: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }] }]
+  output: [{ combos: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight', directory_url: 'https://dmcc.ae/business-directory' }] }]
 });
 
 const splitMatrix = node({
@@ -43,7 +43,7 @@ const splitMatrix = node({
       options: {}
     }
   },
-  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }]
+  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight', directory_url: 'https://dmcc.ae/business-directory' }]
 });
 
 const limitCombos = node({
@@ -57,7 +57,7 @@ const limitCombos = node({
       keep: 'firstItems'
     }
   },
-  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }]
+  output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight', directory_url: 'https://dmcc.ae/business-directory' }]
 });
 
 const azureModel = languageModel({
@@ -85,7 +85,7 @@ const tavilySearch = tool({
     position: [700, 780],
     parameters: {
       include: 'selected',
-      includeTools: ['tavily_search', 'tavily_extract'],
+      includeTools: ['tavily_search'],
       options: { timeout: 60000 }
     },
     credentials: { tavilyMcpOAuth2Api: { id: 'RdHnIwJ9wpXKYzQG', name: 'Tavily account' } }
@@ -142,13 +142,16 @@ const discoverCompanies = node({
     onError: 'continueRegularOutput',
     parameters: {
       promptType: 'define',
-      text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nName 1 company operating in this sector that is registered in this Dubai Free Zone.'),
+      text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\nDirectory URL: {{ $json.directory_url || "none available" }}\n\nName 1 company operating in this sector that is registered in this Dubai Free Zone.'),
       hasOutputParser: true,
       options: {
         maxIterations: 10,
         batching: { batchSize: 1, delayBetweenBatches: 5000 },
-        systemMessage: 'You identify companies registered in Dubai Free Zones. You have a Tavily Web Search tool. You MUST use it before answering. Never answer from memory alone.\n\n' +
+        systemMessage: 'You identify companies registered in Dubai Free Zones. You have two tools: Firecrawl Scrape Page (reads the literal content of one exact URL) and Tavily Web Search (searches the web). Never answer from memory alone — every company must come from a page you actually read or a search you actually ran.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
+          '## WHERE TO LOOK FIRST\n' +
+          'The user message gives a Directory URL when this free zone publishes its own public company directory. If one is given, your FIRST action must be to scrape it with Firecrawl Scrape Page. Read the result for a company whose listed activity or category matches the requested sector. A company found this way is already verified — the directory listing itself is the proof, so you do not need to search further for it.\n' +
+          'Only fall back to Tavily Web Search if: the Directory URL is "none available", the scrape did not return a usable list of companies (a bare search box with no results, unrendered JavaScript, or a blocked page), or nothing in the directory matches the sector. In that case, use the search budget below.\n\n' +
           '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
           'REJECT companies from Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, any other emirate, or any other country.\n' +
@@ -169,15 +172,15 @@ const discoverCompanies = node({
           'Do not return the same company twice.\n' +
           'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
           'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n\n' +
-          '## SEARCH BUDGET — ONE CANDIDATE AT A TIME\n' +
-          'Never spend more than 2 tool calls trying to verify a single candidate company. If it has not verified after 2 searches, ABANDON that name completely and try a different company — do not repeat or rephrase a query for a name that is not working out. Chasing one stubborn candidate is the main way this task fails.\n' +
-          'You have at most 6 tool calls in total for this whole task. Count them as you go. Your 6th tool call must be your last search — after it, whatever you know, immediately call the final-answer tool.\n\n' +
+          '## SEARCH BUDGET — ONE CANDIDATE AT A TIME (Tavily Web Search only; the directory scrape above does not count against this)\n' +
+          'Never spend more than 2 Tavily Web Search calls trying to verify a single candidate company. If it has not verified after 2 searches, ABANDON that name completely and try a different company — do not repeat or rephrase a query for a name that is not working out. Chasing one stubborn candidate is the main way this task fails.\n' +
+          'You have at most 6 Tavily Web Search calls in total for this whole task. Count them as you go. Your 6th search must be your last — after it, whatever you know, immediately call the final-answer tool.\n\n' +
           '## WHEN TO STOP AND GIVE UP\n' +
           'STOP SEARCHING the moment the budget above tells you to, and call the final-answer tool immediately — with a verified company if you found one, or an EMPTY companies array if not. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure, and it is far better than exhausting your iterations without ever answering. Never keep searching hoping the next query will work.\n\n' +
           'Return only the structured data in the required schema.'
       }
     },
-    subnodes: { model: azureModel, tools: [tavilySearch], outputParser: discoverySchema }
+    subnodes: { model: azureModel, tools: [firecrawlScrape, tavilySearch], outputParser: discoverySchema }
   },
   output: [{
     output: {
@@ -393,9 +396,9 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Azure OpenAI + real tools, not built-in search.** `Azure GPT-5 Mini` has no server-side web search of its own, so both agents get explicit tools instead: `Discover Companies In Zone` uses **Tavily Web Search** to find a candidate company; `Enrich Company Contacts` uses **Firecrawl Scrape Page** to read that company’s actual site content, falling back to Tavily to locate the right subpage. This is real agentic tool-calling — `maxIterations` now genuinely applies.\n\n**Tavily uses the native MCP integration, not a hand-built HTTP call.** `Tavily Web Search` is `@n8n/mcp-registry.tavily`, scoped to the `tavily_search` tool via the `Tavily account` (`tavilyMcpOAuth2Api`) credential. Tavily also offers `tavily_extract`, `tavily_crawl`, `tavily_map` and `tavily_research` through the same node if scope ever expands — add them to `includeTools`.\n\n**Firecrawl has no native n8n node**, so `Firecrawl Scrape Page` stays a generic HTTP Request Tool (`genericAuthType: httpCustomAuth`) against the `FireCrawl Web Crawl` credential.\n\n**Why the split.** Discovery is open-ended search — Tavily’s job. Enrichment needs literal published text (a search snippet routinely strips or obfuscates emails; a scraped page doesn’t) — Firecrawl’s job.\n\n**Separate quota from the old OpenAI rate-limit saga.** Azure OpenAI is billed and rate-limited independently of the OpenAI account that forced one-company-per-run pacing. Pacing here starts conservative (`delayBetweenBatches: 5000`, `Limit Combos Per Run: 1`) because the real Azure TPM limit for this deployment is unverified — raise `Limit Combos Per Run` gradually after a clean run, watching for errors at each step.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. DIFC and Dubai Healthcare City are deliberately absent — no overlap with the seven target sectors.\n\n**Scope tests that bite:** discovery rejects names ending in plain LLC (a mainland DED marker) while accepting real free zone suffixes such as DWC-LLC, FZCO and FZE; enrichment requires a +971 phone in a valid UAE shape and writes Not Found otherwise.\n\n**Email required, phone optional.** Dedup keys on email domain, after the filter.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas.',
+  '## Dubai Free Zone Company Research\n\n**Azure OpenAI + real tools, not built-in search.** `Azure GPT-5 Mini` has no server-side web search of its own, so both agents get explicit tools instead: **Firecrawl Scrape Page** and **Tavily Web Search**. This is real agentic tool-calling — `maxIterations` now genuinely applies.\n\n**Directory-first discovery, to protect Tavily credits (1000/month).** `Define Zone And Sector Matrix` attaches each free zone\'s own public company directory URL where one exists (DMCC, JAFZA, Dubai South, Dubai Internet City, Dubai Media City, Dubai Silicon Oasis). `Discover Companies In Zone` scrapes that directory FIRST with Firecrawl — near-zero Tavily cost — and only falls back to a budget-capped Tavily search (max 2 calls per candidate, 6 total) when there is no directory (IFZA, DAFZA, Meydan Free Zone) or the scrape doesn\'t surface a sector match. Earlier runs without this cap burned ~10 Tavily searches per item by fixating on one hard-to-verify candidate instead of moving on — the per-candidate and total caps fix that.\n\n**Enrichment is scrape-first too.** `Enrich Company Contacts` reads the company\'s own site with Firecrawl first, falling back to Tavily only to locate the right subpage (e.g. /contact, /careers) when the homepage doesn\'t have it.\n\n**Tavily uses the native MCP integration, not a hand-built HTTP call.** `Tavily Web Search` is `@n8n/mcp-registry.tavily`, scoped to the `tavily_search` tool via the `Tavily account` (`tavilyMcpOAuth2Api`) credential.\n\n**Firecrawl has no native n8n node**, so `Firecrawl Scrape Page` stays a generic HTTP Request Tool (`genericAuthType: httpCustomAuth`) against the `FireCrawl Web Crawl` credential.\n\n**Separate quota from the old OpenAI rate-limit saga.** Azure OpenAI is billed and rate-limited independently of the OpenAI account that forced one-company-per-run pacing. Pacing here starts conservative (`delayBetweenBatches: 5000`) — raise `Limit Combos Per Run` gradually after a clean run, watching for errors at each step.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. DIFC and Dubai Healthcare City are deliberately absent — no overlap with the seven target sectors.\n\n**DMCC\'s directory terms note it should not be used for email/telephone marketing** — scraping it anyway was an explicit call by the workflow owner, not an oversight.\n\n**Scope tests that bite:** discovery rejects names ending in plain LLC (a mainland DED marker) while accepting real free zone suffixes such as DWC-LLC, FZCO and FZE; enrichment requires a +971 phone in a valid UAE shape and writes Not Found otherwise.\n\n**Email required, phone optional.** Dedup keys on email domain, after the filter.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas.',
   [appendToSheet],
-  { color: 4, position: [0, -40], width: 820, height: 420 }
+  { color: 4, position: [0, -40], width: 820, height: 460 }
 );
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
