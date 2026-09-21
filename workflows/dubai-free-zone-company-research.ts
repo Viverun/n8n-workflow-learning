@@ -156,7 +156,7 @@ const discoverCompanies = node({
           'A free zone entity carries a free zone legal suffix in its registered name: FZCO, FZE, FZ-LLC, FZ LLC, DMCC, DWC-LLC, or Limited. ' +
           'A name ending in plain LLC or L.L.C. is a mainland DED company, not a free zone one. REJECT it.\n' +
           'If the name you found carries no free zone suffix, find the full registered name that does. If there is none, OMIT the company.\n' +
-          'Verify the free zone affiliation against the company website or the free zone member directory. If you cannot verify it, OMIT the company.\n\n' +
+          'Verify the free zone affiliation against the company website or the free zone member directory. If two searches do not confirm one specific candidate, DROP that candidate and move to a different company — do not keep searching for the same name.\n\n' +
           '## FIELDS\n' +
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
           'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
@@ -169,8 +169,11 @@ const discoverCompanies = node({
           'Do not return the same company twice.\n' +
           'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
           'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n\n' +
+          '## SEARCH BUDGET — ONE CANDIDATE AT A TIME\n' +
+          'Never spend more than 2 tool calls trying to verify a single candidate company. If it has not verified after 2 searches, ABANDON that name completely and try a different company — do not repeat or rephrase a query for a name that is not working out. Chasing one stubborn candidate is the main way this task fails.\n' +
+          'You have at most 6 tool calls in total for this whole task. Count them as you go. Your 6th tool call must be your last search — after it, whatever you know, immediately call the final-answer tool.\n\n' +
           '## WHEN TO STOP AND GIVE UP\n' +
-          'You have a limited number of tool calls. If three tavily_search calls have not produced a company you can confidently verify, STOP SEARCHING and call the final-answer tool immediately with an EMPTY companies array. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure, and it is far better than exhausting your iterations without ever answering. Never keep searching hoping the next query will work.\n\n' +
+          'STOP SEARCHING the moment the budget above tells you to, and call the final-answer tool immediately — with a verified company if you found one, or an EMPTY companies array if not. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure, and it is far better than exhausting your iterations without ever answering. Never keep searching hoping the next query will work.\n\n' +
           'Return only the structured data in the required schema.'
       }
     },
