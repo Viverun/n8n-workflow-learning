@@ -108,9 +108,7 @@ const discoverCompanies = node({
   config: {
     name: 'Discover Companies In Zone',
     position: [760, 300],
-    retryOnFail: true,
-    maxTries: 2,
-    waitBetweenTries: 5000,
+    retryOnFail: false,
     parameters: {
       promptType: 'define',
       text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nList 3 companies operating in this sector that are registered in this Dubai Free Zone.'),
@@ -196,9 +194,7 @@ const enrichCompany = node({
   config: {
     name: 'Enrich Company Contacts',
     position: [1080, 300],
-    retryOnFail: true,
-    maxTries: 2,
-    waitBetweenTries: 5000,
+    retryOnFail: false,
     onError: 'continueRegularOutput',
     parameters: {
       promptType: 'define',
@@ -362,7 +358,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**Pacing is the rate-limit guard.** A web-search call costs roughly 85k tokens, measured from run 129 where 2 calls used 170,430, against a fixed 200k tokens-per-minute ceiling. Both agents wait 60s between calls, so one call lands per rolling minute and the window peaks near 125k. 30s put two calls in a minute and failed. If a run hits a rate limit, raise `delayBetweenBatches` — do not change anything else first.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
+  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**Two things keep this under the rate limit, and both matter.** A web-search call costs roughly 85-90k tokens against a fixed 200k tokens-per-minute ceiling, so only one call may land per rolling minute.\n\n1. `delayBetweenBatches` is 60s on both agents. 30s put two calls in a minute (170k) and failed.\n2. `retryOnFail` is OFF on both agents. The node caps `waitBetweenTries` at 5s, so a retry always lands inside the same minute as the call it retries, doubling that minute to ~180k. Run 130 failed this way while pacing was working perfectly at one call per 75s.\n\nDo not re-enable agent retry. If a run hits a rate limit, raise `delayBetweenBatches` — do not change anything else first.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
   [appendToSheet],
   { color: 4, position: [0, -40], width: 760, height: 340 }
 );
