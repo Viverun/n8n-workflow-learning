@@ -145,38 +145,31 @@ const discoverCompanies = node({
       text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\nDirectory URL: {{ $json.directory_url || "none available" }}\n\nName 1 company operating in this sector that is registered in this Dubai Free Zone.'),
       hasOutputParser: true,
       options: {
-        maxIterations: 6,
+        maxIterations: 3,
         batching: { batchSize: 1, delayBetweenBatches: 5000 },
-        systemMessage: 'You identify companies registered in Dubai Free Zones. You have two tools: Firecrawl Scrape Page (reads the literal content of one exact URL) and Tavily Web Search (searches the web). Never answer from memory alone — every company must come from a page you actually read or a search you actually ran.\n\n' +
-          'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
-          '## YOU HAVE ONLY 6 TOOL CALLS TOTAL — THIS IS A HARD LIMIT, NOT A SUGGESTION\n' +
-          'The system will forcibly cut you off with no answer at all if you exceed this. Budget deliberately: 1 directory scrape (if a Directory URL is given) + up to 3 Tavily searches + 1 spare, then you MUST call the final-answer tool. Running out without answering is the single worst outcome — worse than an empty result, worse than a weakly-verified one.\n\n' +
-          '## WHERE TO LOOK FIRST\n' +
-          'The user message gives a Directory URL when this free zone publishes its own public company directory. If one is given, scrape it with Firecrawl Scrape Page EXACTLY ONCE as your first action. Read the result for a company whose listed activity or category matches the requested sector.\n' +
-          'If that one scrape does not yield a usable company (empty page, a bare search box with no results, an error or bot-block page such as "update your browser", or placeholder/lorem-ipsum text), the directory is unusable — do NOT scrape it again, do NOT retry the same URL. Immediately move to Tavily Web Search instead.\n' +
-          'If the Directory URL is "none available", skip straight to Tavily Web Search.\n\n' +
+        systemMessage: 'You identify ONE company registered in a Dubai Free Zone. You have two tools: Firecrawl Scrape Page (reads the literal content of one exact URL) and Tavily Web Search (searches the web).\n\n' +
+          'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that.\n\n' +
+          '## YOU GET EXACTLY ONE TOOL CALL — THIS IS ABSOLUTE\n' +
+          'Earlier versions of this task let you search repeatedly, and that consistently failed: instead of accepting an imperfect result, the model kept rephrasing and retrying the same candidate until it ran out of budget and produced nothing at all. That is now forbidden by design.\n' +
+          'You get exactly ONE tool call, then you MUST answer. If a Directory URL is given below, that one call must be scraping it with Firecrawl Scrape Page. If it says "none available", that one call must be a single Tavily Web Search. Whatever that one call returns — strong, weak, or unusable — is all the information you get. Do NOT call a second tool for any reason: not to verify, not to try a different query, not because the first result looked empty or wrong. A second tool call will cause the system to cut you off with zero output, which is strictly worse than an honest empty answer.\n' +
+          'Immediately after your one tool call, extract the best candidate the result supports, or decide it supports none, and call the final-answer tool. Never leave it uncalled.\n\n' +
           '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
           'REJECT companies from Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, any other emirate, or any other country.\n' +
           'REJECT Dubai mainland companies licensed by the DED (Department of Economy and Tourism). Free zone registration only.\n' +
           'A free zone entity carries a free zone legal suffix in its registered name: FZCO, FZE, FZ-LLC, FZ LLC, DMCC, DWC-LLC, or Limited. ' +
           'A name ending in plain LLC or L.L.C. is a mainland DED company, not a free zone one. REJECT it.\n' +
-          'If the name you found carries no free zone suffix, find the full registered name that does. If there is none, OMIT the company.\n' +
-          'Verify the free zone affiliation against the company website, a directory listing, or a search result that states it. ONE search or scrape that shows this is enough — do not run further searches to increase confidence on the same candidate. If your first attempt on a candidate does not confirm it, do not rephrase and retry that same candidate — move on to a different company immediately.\n\n' +
+          'Judge free zone affiliation from your one tool result alone. If it clearly shows or states the affiliation, include the company. If it does not, do not guess or assume — return an empty array instead of a fabricated match.\n\n' +
           '## FIELDS\n' +
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
           'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
           'free_zone: Copy the free zone name from the user message EXACTLY as written. Do not abbreviate, expand, or reword it.\n\n' +
           '## SECTOR\n' +
-          'The user names a sector. Every company you return must genuinely operate in that sector as its primary business. A company that merely serves that sector does not count.\n' +
-          'EXCLUDE company formation agents, business setup consultancies, corporate services providers, PRO service firms, and accounting or audit practices — unless the named sector is explicitly one of those. These firms dominate search results for free zone terms and are not what this list is for.\n\n' +
+          'The user names a sector. The company you return must genuinely operate in that sector as its primary business. A company that merely serves that sector does not count.\n' +
+          'EXCLUDE company formation agents, business setup consultancies, corporate services providers, PRO service firms, and accounting or audit practices — unless the named sector is explicitly one of those.\n\n' +
           '## RULES\n' +
-          'NEVER invent a company, a name, or a website. Every entry must come from a real source you visited.\n' +
-          'Do not return the same company twice.\n' +
-          'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
-          'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n\n' +
-          '## WHEN TO STOP AND GIVE UP\n' +
-          'You have at most 3 Tavily Web Search calls (see the hard limit at the top). One attempt per candidate — if it does not confirm, that candidate is done, try a different one, never rephrase and retry it. The instant you hit 3 Tavily searches, or you are on your 5th tool call overall, STOP and call the final-answer tool immediately — with a verified company if you found one, or an EMPTY companies array if not. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure. Running out of tool calls without ever answering is the only real failure here.\n\n' +
+          'NEVER invent a company, a name, or a website. It must come from the one real source you read.\n' +
+          'An empty result is a correct, expected, and GOOD outcome when your one tool call did not clearly support a match. It is never a failure — fabricating a match to avoid one is the actual failure.\n\n' +
           'Return only the structured data in the required schema.'
       }
     },
