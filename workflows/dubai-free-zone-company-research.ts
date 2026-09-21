@@ -69,7 +69,6 @@ const azureModel = languageModel({
     parameters: {
       model: 'gpt-5-mini',
       options: {
-        temperature: 0.2,
         timeout: 120000,
         maxRetries: 1
       }
