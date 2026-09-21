@@ -173,25 +173,6 @@ const splitDiscovered = node({
   }]
 });
 
-const waitBetweenCalls = node({
-  type: 'n8n-nodes-base.wait',
-  version: 1.1,
-  config: {
-    name: 'Cool Down Token Window',
-    position: [960, 300],
-    parameters: {
-      resume: 'timeInterval',
-      amount: 120,
-      unit: 'seconds'
-    }
-  },
-  output: [{
-    company_name: 'Example Trading DMCC',
-    website: 'https://example.ae',
-    free_zone: 'DMCC - Dubai Multi Commodities Centre'
-  }]
-});
-
 const contactSchema = outputParser({
   type: '@n8n/n8n-nodes-langchain.outputParserStructured',
   version: 1.3,
@@ -377,7 +358,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**One company per manual run. Two model calls, 120 seconds apart.**\n\nA single web-search call consumes 150-180k tokens against a fixed 200k-per-minute limit, so two calls must never share a minute. Runs 129-132 all failed as near-misses: used 159-180k, and the next call was rejected for wanting another 40-53k on top.\n\n- `Limit Combos Per Run` is 1 and discovery asks for 1 company, so a run makes exactly 2 calls.\n- `Cool Down Token Window` waits 120s between discovery and enrichment. This is the load-bearing node: `delayBetweenBatches` only spaces items inside one node, so with a single item it does nothing and the two calls would otherwise fire back to back.\n- `retryOnFail` is OFF on both agents. `waitBetweenTries` is capped at 5s, so a retry always lands inside the window of the call it retries.\n\nRun it again for the next company. The matrix reshuffles each run, so repeated runs walk different zone and sector pairs.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
+  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**One company per manual run. Two model calls, 120 seconds apart.**\n\nA single web-search call consumes 150-180k tokens against a fixed 200k-per-minute limit, so two calls must never share a minute. Runs 129-132 all failed as near-misses: used 159-180k, and the next call was rejected for wanting another 40-53k on top.\n\n- `Limit Combos Per Run` is 1 and discovery asks for 1 company, so a run makes exactly 2 calls.\n- The two calls run back to back. `delayBetweenBatches` does NOT separate them: it only spaces items inside one node, so with a single item it has no effect at all. If this run hits the rate limit, put a Wait node between Split Discovered Companies and Enrich Company Contacts.\n- `retryOnFail` is OFF on both agents. `waitBetweenTries` is capped at 5s, so a retry always lands inside the window of the call it retries.\n\nRun it again for the next company. The matrix reshuffles each run, so repeated runs walk different zone and sector pairs.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
   [appendToSheet],
   { color: 4, position: [0, -40], width: 760, height: 340 }
 );
@@ -389,7 +370,6 @@ export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Com
   .to(limitCombos)
   .to(discoverCompanies)
   .to(splitDiscovered)
-  .to(waitBetweenCalls)
   .to(enrichCompany)
   .to(flattenRecord)
   .to(requireEmail)
