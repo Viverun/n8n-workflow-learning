@@ -53,7 +53,7 @@ const limitCombos = node({
     name: 'Limit Combos Per Run',
     position: [560, 300],
     parameters: {
-      maxItems: 1,
+      maxItems: 8,
       keep: 'firstItems'
     }
   },
@@ -139,6 +139,7 @@ const discoverCompanies = node({
     name: 'Discover Companies In Zone',
     position: [760, 300],
     retryOnFail: false,
+    onError: 'continueRegularOutput',
     parameters: {
       promptType: 'define',
       text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nName 1 company operating in this sector that is registered in this Dubai Free Zone.'),
