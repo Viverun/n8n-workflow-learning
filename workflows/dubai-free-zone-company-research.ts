@@ -117,7 +117,7 @@ const discoverCompanies = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 30000 },
+        batching: { batchSize: 1, delayBetweenBatches: 60000 },
         systemMessage: 'You identify companies registered in Dubai Free Zones. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
           '## SCOPE\n' +
@@ -206,7 +206,7 @@ const enrichCompany = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 30000 },
+        batching: { batchSize: 1, delayBetweenBatches: 60000 },
         systemMessage: 'You find published contact details for one specific company. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'You are given one company, already verified as registered in a Dubai Free Zone. Do not question that. Do not research other companies. Find contact details for this company only.\n\n' +
           '## FIELDS\n' +
@@ -362,7 +362,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**Pacing is the rate-limit guard.** Each web-search call costs roughly 50k tokens against a fixed 200k tokens-per-minute ceiling. Both agents wait 30s between calls, which holds the run near 100k TPM. If a run ever hits a rate limit, raise `delayBetweenBatches` — do not change anything else first.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
+  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**Pacing is the rate-limit guard.** A web-search call costs roughly 85k tokens, measured from run 129 where 2 calls used 170,430, against a fixed 200k tokens-per-minute ceiling. Both agents wait 60s between calls, so one call lands per rolling minute and the window peaks near 125k. 30s put two calls in a minute and failed. If a run hits a rate limit, raise `delayBetweenBatches` — do not change anything else first.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
   [appendToSheet],
   { color: 4, position: [0, -40], width: 760, height: 340 }
 );
