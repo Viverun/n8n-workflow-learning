@@ -1,4 +1,4 @@
-import { workflow, node, trigger, sticky, languageModel, tool, outputParser, expr, fromAi, newCredential } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, languageModel, tool, outputParser, expr, fromAi } from '@n8n/workflow-sdk';
 
 const startTrigger = trigger({
   type: 'n8n-nodes-base.manualTrigger',
@@ -79,27 +79,17 @@ const azureModel = languageModel({
 });
 
 const tavilySearch = tool({
-  type: 'n8n-nodes-base.httpRequestTool',
-  version: 4.5,
+  type: '@n8n/mcp-registry.tavily',
+  version: 1.1,
   config: {
     name: 'Tavily Web Search',
     position: [700, 780],
     parameters: {
-      method: 'POST',
-      url: 'https://api.tavily.com/search',
-      authentication: 'genericCredentialType',
-      genericAuthType: 'httpTemplatedCustomAuth',
-      sendBody: true,
-      contentType: 'json',
-      specifyBody: 'json',
-      jsonBody: {
-        query: fromAi('query', 'The web search query'),
-        max_results: 5,
-        search_depth: 'basic'
-      },
-      options: {}
+      include: 'selected',
+      includeTools: ['tavily_search'],
+      options: { timeout: 60000 }
     },
-    credentials: { httpTemplatedCustomAuth: newCredential('Tavily API') }
+    credentials: { tavilyMcpOAuth2Api: { id: 'RdHnIwJ9wpXKYzQG', name: 'Tavily account' } }
   }
 });
 
@@ -113,7 +103,7 @@ const firecrawlScrape = tool({
       method: 'POST',
       url: 'https://api.firecrawl.dev/v2/scrape',
       authentication: 'genericCredentialType',
-      genericAuthType: 'httpTemplatedCustomAuth',
+      genericAuthType: 'httpCustomAuth',
       sendBody: true,
       contentType: 'json',
       specifyBody: 'json',
@@ -124,7 +114,7 @@ const firecrawlScrape = tool({
       },
       options: {}
     },
-    credentials: { httpTemplatedCustomAuth: newCredential('Firecrawl API') }
+    credentials: { httpCustomAuth: { id: 'KcVS45MRr31BDDAY', name: 'FireCrawl Web Crawl' } }
   }
 });
 
@@ -398,7 +388,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Azure OpenAI + real tools, not built-in search.** `Azure GPT-5 Mini` has no server-side web search of its own, so both agents get explicit tools instead: `Discover Companies In Zone` uses **Tavily Web Search** to find a candidate company; `Enrich Company Contacts` uses **Firecrawl Scrape Page** to read that company’s actual site content, falling back to Tavily to locate the right subpage. This is real agentic tool-calling — `maxIterations` now genuinely applies, unlike the old OpenAI built-in search where it was dead config.\n\n**Why the split.** Discovery is open-ended search — Tavily’s job. Enrichment needs literal published text (a search snippet routinely strips or obfuscates emails; a scraped page doesn’t) — Firecrawl’s job.\n\n**Credentials needed once.** `Tavily API` and `Firecrawl API` are referenced as new `httpTemplatedCustomAuth` credentials — open each in the n8n editor and set the template to `{"headers":{"Authorization":"Bearer {{api_key}}"}}` with your key as `api_key`. Nothing will run until both exist.\n\n**Separate quota from the old OpenAI rate-limit saga.** Azure OpenAI is billed and rate-limited independently of the OpenAI account that forced one-company-per-run pacing. Pacing here starts conservative (`delayBetweenBatches: 5000`, `Limit Combos Per Run: 1`) because the real Azure TPM limit for this deployment is unverified — raise `Limit Combos Per Run` gradually after a clean run, watching for errors at each step, rather than assuming headroom.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. DIFC and Dubai Healthcare City are deliberately absent — no overlap with the seven target sectors.\n\n**Scope tests that bite:** discovery rejects names ending in plain LLC (a mainland DED marker) while accepting real free zone suffixes such as DWC-LLC, FZCO and FZE; enrichment requires a +971 phone in a valid UAE shape and writes Not Found otherwise.\n\n**Email required, phone optional.** Dedup keys on email domain, after the filter.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas.',
+  '## Dubai Free Zone Company Research\n\n**Azure OpenAI + real tools, not built-in search.** `Azure GPT-5 Mini` has no server-side web search of its own, so both agents get explicit tools instead: `Discover Companies In Zone` uses **Tavily Web Search** to find a candidate company; `Enrich Company Contacts` uses **Firecrawl Scrape Page** to read that company’s actual site content, falling back to Tavily to locate the right subpage. This is real agentic tool-calling — `maxIterations` now genuinely applies.\n\n**Tavily uses the native MCP integration, not a hand-built HTTP call.** `Tavily Web Search` is `@n8n/mcp-registry.tavily`, scoped to the `tavily_search` tool via the `Tavily account` (`tavilyMcpOAuth2Api`) credential. Tavily also offers `tavily_extract`, `tavily_crawl`, `tavily_map` and `tavily_research` through the same node if scope ever expands — add them to `includeTools`.\n\n**Firecrawl has no native n8n node**, so `Firecrawl Scrape Page` stays a generic HTTP Request Tool (`genericAuthType: httpCustomAuth`) against the `FireCrawl Web Crawl` credential.\n\n**Why the split.** Discovery is open-ended search — Tavily’s job. Enrichment needs literal published text (a search snippet routinely strips or obfuscates emails; a scraped page doesn’t) — Firecrawl’s job.\n\n**Separate quota from the old OpenAI rate-limit saga.** Azure OpenAI is billed and rate-limited independently of the OpenAI account that forced one-company-per-run pacing. Pacing here starts conservative (`delayBetweenBatches: 5000`, `Limit Combos Per Run: 1`) because the real Azure TPM limit for this deployment is unverified — raise `Limit Combos Per Run` gradually after a clean run, watching for errors at each step.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. DIFC and Dubai Healthcare City are deliberately absent — no overlap with the seven target sectors.\n\n**Scope tests that bite:** discovery rejects names ending in plain LLC (a mainland DED marker) while accepting real free zone suffixes such as DWC-LLC, FZCO and FZE; enrichment requires a +971 phone in a valid UAE shape and writes Not Found otherwise.\n\n**Email required, phone optional.** Dedup keys on email domain, after the filter.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas.',
   [appendToSheet],
   { color: 4, position: [0, -40], width: 820, height: 420 }
 );
