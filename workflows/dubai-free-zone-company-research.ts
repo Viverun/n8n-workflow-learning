@@ -53,7 +53,7 @@ const limitCombos = node({
     name: 'Limit Combos Per Run',
     position: [560, 300],
     parameters: {
-      maxItems: 3,
+      maxItems: 10,
       keep: 'firstItems'
     }
   },
