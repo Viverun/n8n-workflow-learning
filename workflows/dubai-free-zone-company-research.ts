@@ -53,7 +53,7 @@ const limitCombos = node({
     name: 'Limit Combos Per Run',
     position: [560, 300],
     parameters: {
-      maxItems: 8,
+      maxItems: 3,
       keep: 'firstItems'
     }
   },
@@ -85,7 +85,7 @@ const tavilySearch = tool({
     position: [700, 780],
     parameters: {
       include: 'selected',
-      includeTools: ['tavily_search'],
+      includeTools: ['tavily_search', 'tavily_extract'],
       options: { timeout: 60000 }
     },
     credentials: { tavilyMcpOAuth2Api: { id: 'RdHnIwJ9wpXKYzQG', name: 'Tavily account' } }
@@ -147,7 +147,7 @@ const discoverCompanies = node({
       options: {
         maxIterations: 10,
         batching: { batchSize: 1, delayBetweenBatches: 5000 },
-        systemMessage: 'You identify companies registered in Dubai Free Zones. You have a Tavily Web Search tool. You MUST use it before answering. Never answer from memory alone.\n\n' +
+        systemMessage: 'You identify companies registered in Dubai Free Zones. You have Tavily Web Search tools: tavily_search (find candidates) and tavily_extract (read a specific page directly to confirm a fact). You MUST use tavily_search before answering. Never answer from memory alone.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
           '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
@@ -156,7 +156,7 @@ const discoverCompanies = node({
           'A free zone entity carries a free zone legal suffix in its registered name: FZCO, FZE, FZ-LLC, FZ LLC, DMCC, DWC-LLC, or Limited. ' +
           'A name ending in plain LLC or L.L.C. is a mainland DED company, not a free zone one. REJECT it.\n' +
           'If the name you found carries no free zone suffix, find the full registered name that does. If there is none, OMIT the company.\n' +
-          'Verify the free zone affiliation against the company website or the free zone member directory. If you cannot verify it, OMIT the company.\n\n' +
+          'Verify the free zone affiliation against the company website or the free zone member directory. If a search snippet does not settle it, use tavily_extract on the company’s own website or a directory page to confirm directly — this resolves the question in one step, which is faster and more reliable than searching again.\n\n' +
           '## FIELDS\n' +
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
           'website: The official company website, full URL including https://. Not a directory listing, not LinkedIn, not an aggregator profile. A company with no findable official website should be omitted — the next step needs it.\n' +
@@ -168,7 +168,9 @@ const discoverCompanies = node({
           'NEVER invent a company, a name, or a website. Every entry must come from a real source you visited.\n' +
           'Do not return the same company twice.\n' +
           'Favour ordinary operating businesses over the largest and most famous names in the zone.\n' +
-          'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n' +
+          'Return the number asked for. If you can only verify fewer, return fewer. Never pad the list to reach the target.\n\n' +
+          '## WHEN TO STOP AND GIVE UP\n' +
+          'You have a limited number of tool calls. If two tavily_search calls plus one tavily_extract have not produced a company you can confidently verify, STOP SEARCHING and call the final-answer tool immediately with an EMPTY companies array. An empty result is a correct, expected outcome for a hard zone/sector combination — it is NOT a failure, and it is far better than exhausting your iterations without ever answering. Never keep searching hoping the next query will work.\n\n' +
           'Return only the structured data in the required schema.'
       }
     },
