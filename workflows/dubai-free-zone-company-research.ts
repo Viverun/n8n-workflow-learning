@@ -22,7 +22,7 @@ const defineMatrix = node({
             id: 'combos',
             name: 'combos',
             type: 'array',
-            value: expr('{{ ["DMCC - Dubai Multi Commodities Centre", "JAFZA - Jebel Ali Free Zone", "DIFC - Dubai International Financial Centre", "Dubai Internet City", "Dubai Media City", "DAFZA - Dubai Airport Free Zone", "Dubai Silicon Oasis", "Dubai South", "IFZA - International Free Zone Authority", "Meydan Free Zone", "Dubai Healthcare City"].flatMap(z => ["Retail", "Food and Beverage", "Logistics and Freight", "E-commerce", "Marketing and Advertising", "Technology and Software", "Hospitality and Travel"].map(s => ({ free_zone: z, sector: s }))).sort(() => Math.random() - 0.5) }}')
+            value: expr('{{ Object.entries({"DMCC - Dubai Multi Commodities Centre":["Retail","E-commerce","Food and Beverage","Logistics and Freight"],"JAFZA - Jebel Ali Free Zone":["Logistics and Freight","Retail","E-commerce","Food and Beverage"],"DAFZA - Dubai Airport Free Zone":["Logistics and Freight","E-commerce"],"Dubai South":["Logistics and Freight","E-commerce","Hospitality and Travel"],"Dubai Internet City":["Technology and Software","E-commerce"],"Dubai Media City":["Marketing and Advertising","Technology and Software"],"Dubai Silicon Oasis":["Technology and Software","E-commerce"],"IFZA - International Free Zone Authority":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel","Food and Beverage","Retail"],"Meydan Free Zone":["Marketing and Advertising","E-commerce","Technology and Software","Hospitality and Travel"]}).flatMap(e => e[1].map(s => ({ free_zone: e[0], sector: s }))).sort(() => Math.random() - 0.5) }}')
           }
         ]
       }
@@ -78,7 +78,7 @@ const openAiModel = languageModel({
         }
       },
       options: {
-        reasoningEffort: 'medium',
+        reasoningEffort: 'low',
         maxRetries: 0,
         timeout: 600000
       }
@@ -113,11 +113,11 @@ const discoverCompanies = node({
     waitBetweenTries: 5000,
     parameters: {
       promptType: 'define',
-      text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nList 5 companies operating in this sector that are registered in this Dubai Free Zone.'),
+      text: expr('Sector: {{ $json.sector }}\nFree zone: {{ $json.free_zone }}\n\nList 3 companies operating in this sector that are registered in this Dubai Free Zone.'),
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 20000 },
+        batching: { batchSize: 1, delayBetweenBatches: 30000 },
         systemMessage: 'You identify companies registered in Dubai Free Zones. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
           '## SCOPE\n' +
@@ -203,7 +203,7 @@ const enrichCompany = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 20000 },
+        batching: { batchSize: 1, delayBetweenBatches: 30000 },
         systemMessage: 'You find published contact details for one specific company. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
           'You are given one company, already verified as registered in a Dubai Free Zone. Do not question that. Do not research other companies. Find contact details for this company only.\n\n' +
           '## FIELDS\n' +
@@ -357,7 +357,7 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\nTo test cheaply, cut **Define Dubai Free Zones** to one zone and lower the count in `Discover Companies In Zone`.',
+  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**Pacing is the rate-limit guard.** Each web-search call costs roughly 50k tokens against a fixed 200k tokens-per-minute ceiling. Both agents wait 30s between calls, which holds the run near 100k TPM. If a run ever hits a rate limit, raise `delayBetweenBatches` — do not change anything else first.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
   [appendToSheet],
   { color: 4, position: [0, -40], width: 760, height: 340 }
 );
