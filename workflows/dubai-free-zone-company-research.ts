@@ -124,6 +124,9 @@ const discoverCompanies = node({
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
           'REJECT companies from Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, Umm Al Quwain, any other emirate, or any other country.\n' +
           'REJECT Dubai mainland companies licensed by the DED (Department of Economy and Tourism). Free zone registration only.\n' +
+          'A free zone entity carries a free zone legal suffix in its registered name: FZCO, FZE, FZ-LLC, FZ LLC, DMCC, DWC-LLC, or Limited. ' +
+          'A name ending in plain LLC or L.L.C. is a mainland DED company, not a free zone one. REJECT it.\n' +
+          'If the name you found carries no free zone suffix, find the full registered name that does. If there is none, OMIT the company.\n' +
           'Verify the free zone affiliation against the company website or the free zone member directory. If you cannot verify it, OMIT the company.\n\n' +
           '## FIELDS\n' +
           'company_name: The full official registered name, including the legal suffix (DMCC, FZ-LLC, FZE, Limited) when part of the name.\n' +
@@ -210,7 +213,9 @@ const enrichCompany = node({
           'email: A publicly listed business email for this company. Prefer, in this order: HR, recruitment, careers, hiring, then a general business address.\n' +
           'industry: The primary industry or business activity.\n' +
           'point_of_contact: A publicly listed person. Prefer HR, Recruitment, Talent Acquisition or Hiring staff; then Founder, CEO, Director or Manager; then any other named company contact. Format as "Name, Role" when both are known.\n' +
-          'contact_number: A publicly listed phone number, in international format where possible.\n\n' +
+          'contact_number: A publicly listed UAE phone number for this company, written in international format starting +971.\n' +
+          'This company operates in Dubai. A foreign number is the WRONG number even when it appears on the website \u2014 a French mobile (+33), a US area code (+1), or any other country code is not this company\u0027s UAE contact. Output Not Found instead of a foreign number.\n' +
+          'Check that the digits form a real UAE number: a landline is +971 4 followed by 7 digits, a mobile is +971 5X followed by 7 digits, a toll-free is 800 followed by 4 to 7 digits. If the number you found does not fit one of these shapes, it is malformed \u2014 output Not Found.\n\n' +
           '## WHERE TO LOOK\n' +
           "Check the company website's contact page, careers page, about page, team page, and footer. These are where published addresses actually live.\n" +
           '\n' +
