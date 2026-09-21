@@ -1,4 +1,4 @@
-import { workflow, node, trigger, sticky, languageModel, outputParser, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, languageModel, tool, outputParser, expr, fromAi, newCredential } from '@n8n/workflow-sdk';
 
 const startTrigger = trigger({
   type: 'n8n-nodes-base.manualTrigger',
@@ -60,30 +60,71 @@ const limitCombos = node({
   output: [{ free_zone: 'DMCC - Dubai Multi Commodities Centre', sector: 'Logistics and Freight' }]
 });
 
-const openAiModel = languageModel({
-  type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
-  version: 1.3,
+const azureModel = languageModel({
+  type: '@n8n/n8n-nodes-langchain.lmChatAzureOpenAi',
+  version: 1,
   config: {
-    name: 'GPT-5.4 Mini Web Search',
-    position: [880, 600],
+    name: 'Azure GPT-5 Mini',
+    position: [880, 620],
     parameters: {
-      model: { __rl: true, mode: 'list', value: 'gpt-5.4-mini', cachedResultName: 'gpt-5.4-mini' },
-      responsesApiEnabled: true,
-      builtInTools: {
-        webSearch: {
-          searchContextSize: 'low',
-          country: 'AE',
-          city: 'Dubai',
-          region: 'Dubai'
-        }
-      },
+      model: 'gpt-5-mini',
       options: {
-        reasoningEffort: 'low',
-        maxRetries: 0,
-        timeout: 600000
+        temperature: 0.2,
+        timeout: 120000,
+        maxRetries: 1
       }
     },
-    credentials: { openAiApi: { id: 'LcSKl7EB0pYld3oq', name: 'OpenAI account' } }
+    credentials: { azureOpenAiApi: { id: 'RlTrqkjqaMvSzEIK', name: 'Azure Open AI account' } }
+  }
+});
+
+const tavilySearch = tool({
+  type: 'n8n-nodes-base.httpRequestTool',
+  version: 4.5,
+  config: {
+    name: 'Tavily Web Search',
+    position: [700, 780],
+    parameters: {
+      method: 'POST',
+      url: 'https://api.tavily.com/search',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpTemplatedCustomAuth',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: {
+        query: fromAi('query', 'The web search query'),
+        max_results: 5,
+        search_depth: 'basic'
+      },
+      options: {}
+    },
+    credentials: { httpTemplatedCustomAuth: newCredential('Tavily API') }
+  }
+});
+
+const firecrawlScrape = tool({
+  type: 'n8n-nodes-base.httpRequestTool',
+  version: 4.5,
+  config: {
+    name: 'Firecrawl Scrape Page',
+    position: [1060, 780],
+    parameters: {
+      method: 'POST',
+      url: 'https://api.firecrawl.dev/v2/scrape',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpTemplatedCustomAuth',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: {
+        url: fromAi('url', 'The exact page URL to read, including https://'),
+        formats: ['markdown'],
+        onlyMainContent: true
+      },
+      options: {}
+    },
+    credentials: { httpTemplatedCustomAuth: newCredential('Firecrawl API') }
   }
 });
 
@@ -92,13 +133,13 @@ const discoverySchema = outputParser({
   version: 1.3,
   config: {
     name: 'Discovered Companies Schema',
-    position: [620, 600],
+    position: [620, 620],
     parameters: {
       schemaType: 'fromJson',
       jsonSchemaExample: '{\n  "companies": [\n    {\n      "company_name": "Example Trading DMCC",\n      "website": "https://example.ae",\n      "free_zone": "DMCC - Dubai Multi Commodities Centre"\n    }\n  ]\n}',
       autoFix: true
     },
-    subnodes: { model: openAiModel }
+    subnodes: { model: azureModel }
   }
 });
 
@@ -115,8 +156,8 @@ const discoverCompanies = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 120000 },
-        systemMessage: 'You identify companies registered in Dubai Free Zones. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
+        batching: { batchSize: 1, delayBetweenBatches: 5000 },
+        systemMessage: 'You identify companies registered in Dubai Free Zones. You have a Tavily Web Search tool. You MUST use it before answering. Never answer from memory alone.\n\n' +
           'This is a DISCOVERY step only. Return just the company name, official website, and free zone. Do NOT research emails, phone numbers, or contacts — a later step does that. Keep this step fast.\n\n' +
           '## SCOPE\n' +
           'Include a company ONLY if it is registered, licensed, or operating in the specific Dubai Free Zone named in the user message.\n' +
@@ -132,7 +173,7 @@ const discoverCompanies = node({
           'free_zone: Copy the free zone name from the user message EXACTLY as written. Do not abbreviate, expand, or reword it.\n\n' +
           '## SECTOR\n' +
           'The user names a sector. Every company you return must genuinely operate in that sector as its primary business. A company that merely serves that sector does not count.\n' +
-          'EXCLUDE company formation agents, business setup consultancies, corporate services providers, PRO service firms, and accounting or audit practices \u2014 unless the named sector is explicitly one of those. These firms dominate search results for free zone terms and are not what this list is for.\n\n' +
+          'EXCLUDE company formation agents, business setup consultancies, corporate services providers, PRO service firms, and accounting or audit practices — unless the named sector is explicitly one of those. These firms dominate search results for free zone terms and are not what this list is for.\n\n' +
           '## RULES\n' +
           'NEVER invent a company, a name, or a website. Every entry must come from a real source you visited.\n' +
           'Do not return the same company twice.\n' +
@@ -141,7 +182,7 @@ const discoverCompanies = node({
           'Return only the structured data in the required schema.'
       }
     },
-    subnodes: { model: openAiModel, outputParser: discoverySchema }
+    subnodes: { model: azureModel, tools: [tavilySearch], outputParser: discoverySchema }
   },
   output: [{
     output: {
@@ -178,13 +219,13 @@ const contactSchema = outputParser({
   version: 1.3,
   config: {
     name: 'Company Contact Schema',
-    position: [1140, 600],
+    position: [1140, 620],
     parameters: {
       schemaType: 'fromJson',
       jsonSchemaExample: '{\n  "email": "careers@example.ae",\n  "industry": "Commodities Trading",\n  "point_of_contact": "Jane Doe, HR Manager",\n  "contact_number": "+971 4 000 0000"\n}',
       autoFix: true
     },
-    subnodes: { model: openAiModel }
+    subnodes: { model: azureModel }
   }
 });
 
@@ -202,22 +243,21 @@ const enrichCompany = node({
       hasOutputParser: true,
       options: {
         maxIterations: 10,
-        batching: { batchSize: 1, delayBetweenBatches: 120000 },
-        systemMessage: 'You find published contact details for one specific company. You have a web search tool. You MUST use it. Never answer from memory alone.\n\n' +
+        batching: { batchSize: 1, delayBetweenBatches: 5000 },
+        systemMessage: 'You find published contact details for one specific company. You have two tools: Firecrawl Scrape Page (reads the literal text of one exact URL) and Tavily Web Search (searches the web to find which exact subpage to scrape). You MUST scrape at least one real page of this company’s site before reporting any contact detail. Never answer from memory alone.\n\n' +
           'You are given one company, already verified as registered in a Dubai Free Zone. Do not question that. Do not research other companies. Find contact details for this company only.\n\n' +
           '## FIELDS\n' +
           'email: A publicly listed business email for this company. Prefer, in this order: HR, recruitment, careers, hiring, then a general business address.\n' +
           'industry: The primary industry or business activity.\n' +
           'point_of_contact: A publicly listed person. Prefer HR, Recruitment, Talent Acquisition or Hiring staff; then Founder, CEO, Director or Manager; then any other named company contact. Format as "Name, Role" when both are known.\n' +
           'contact_number: A publicly listed UAE phone number for this company, written in international format starting +971.\n' +
-          'This company operates in Dubai. A foreign number is the WRONG number even when it appears on the website \u2014 a French mobile (+33), a US area code (+1), or any other country code is not this company\u0027s UAE contact. Output Not Found instead of a foreign number.\n' +
-          'Check that the digits form a real UAE number: a landline is +971 4 followed by 7 digits, a mobile is +971 5X followed by 7 digits, a toll-free is 800 followed by 4 to 7 digits. If the number you found does not fit one of these shapes, it is malformed \u2014 output Not Found.\n\n' +
+          'This company operates in Dubai. A foreign number is the WRONG number even when it appears on the website — a French mobile (+33), a US area code (+1), or any other country code is not this company’s UAE contact. Output Not Found instead of a foreign number.\n' +
+          'Check that the digits form a real UAE number: a landline is +971 4 followed by 7 digits, a mobile is +971 5X followed by 7 digits, a toll-free is 800 followed by 4 to 7 digits. If the number you found does not fit one of these shapes, it is malformed — output Not Found.\n\n' +
           '## WHERE TO LOOK\n' +
-          "Check the company website's contact page, careers page, about page, team page, and footer. These are where published addresses actually live.\n" +
-          '\n' +
+          'Start by scraping the homepage with Firecrawl Scrape Page. If the contact, careers, or team information is not there, use Tavily Web Search with a site-restricted query (for example: site:domain.com contact OR careers) to find the right subpage URL, then scrape that exact URL. Likely paths: /contact, /careers, /about, /team, and the page footer.\n\n' +
           '## ANTI-FABRICATION — the most important rule\n' +
-          'NEVER invent, guess, infer, extrapolate, or construct any value. Every value must have been read from a real source you actually visited.\n' +
-          'You are specifically FORBIDDEN from building an email address out of a pattern. If the domain is example.ae, you must NOT output info@example.ae, hr@example.ae, or careers@example.ae unless you actually saw that exact address published on a real page.\n' +
+          'NEVER invent, guess, infer, extrapolate, or construct any value. Every value must have been read from a real page you actually scraped.\n' +
+          'You are specifically FORBIDDEN from building an email address out of a pattern. If the domain is example.ae, you must NOT output info@example.ae, hr@example.ae, or careers@example.ae unless you actually saw that exact address published on a scraped page.\n' +
           'You are specifically FORBIDDEN from guessing a phone number from a country or area code.\n' +
           'You are specifically FORBIDDEN from naming a person whose connection to this company you did not see stated.\n' +
           'When a field cannot be verified, output the exact string: Not Found\n' +
@@ -227,7 +267,7 @@ const enrichCompany = node({
           'Return only the structured data in the required schema. No commentary, no markdown, no source citations in the field values.'
       }
     },
-    subnodes: { model: openAiModel, outputParser: contactSchema }
+    subnodes: { model: azureModel, tools: [firecrawlScrape, tavilySearch], outputParser: contactSchema }
   },
   output: [{
     output: {
@@ -358,9 +398,9 @@ const appendToSheet = node({
 });
 
 const setupNote = sticky(
-  '## Dubai Free Zone Company Research\n\n**Two phases.** `Discover Companies In Zone` makes one light call per free zone returning only names and websites. `Enrich Company Contacts` then makes one small call per company for email, industry, contact and phone. Every call stays bounded, so volume scales without hitting timeouts or rate limits.\n\n**Email is required, phone is not.** Rows without a real email address are dropped. `contact_number` may be `Not Found` and still saves.\n\n**Dedup keys on email domain**, after the filter, so only rows that reach the sheet are recorded as seen.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas, producing `#ERROR!`.\n\n**One company per manual run. Two model calls, 120 seconds apart.**\n\nA single web-search call consumes 150-180k tokens against a fixed 200k-per-minute limit, so two calls must never share a minute. Runs 129-132 all failed as near-misses: used 159-180k, and the next call was rejected for wanting another 40-53k on top.\n\n- `Limit Combos Per Run` is 1 and discovery asks for 1 company, so a run makes exactly 2 calls.\n- The two calls run back to back. `delayBetweenBatches` does NOT separate them: it only spaces items inside one node, so with a single item it has no effect at all. If this run hits the rate limit, put a Wait node between Split Discovered Companies and Enrich Company Contacts.\n- `retryOnFail` is OFF on both agents. `waitBetweenTries` is capped at 5s, so a retry always lands inside the window of the call it retries.\n\nRun it again for the next company. The matrix reshuffles each run, so repeated runs walk different zone and sector pairs.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. Asking a zone for a sector it does not have makes the model search exhaustively and burns the token budget.\n\nTo test cheaply, lower `maxItems` in **Limit Combos Per Run**.',
+  '## Dubai Free Zone Company Research\n\n**Azure OpenAI + real tools, not built-in search.** `Azure GPT-5 Mini` has no server-side web search of its own, so both agents get explicit tools instead: `Discover Companies In Zone` uses **Tavily Web Search** to find a candidate company; `Enrich Company Contacts` uses **Firecrawl Scrape Page** to read that company’s actual site content, falling back to Tavily to locate the right subpage. This is real agentic tool-calling — `maxIterations` now genuinely applies, unlike the old OpenAI built-in search where it was dead config.\n\n**Why the split.** Discovery is open-ended search — Tavily’s job. Enrichment needs literal published text (a search snippet routinely strips or obfuscates emails; a scraped page doesn’t) — Firecrawl’s job.\n\n**Credentials needed once.** `Tavily API` and `Firecrawl API` are referenced as new `httpTemplatedCustomAuth` credentials — open each in the n8n editor and set the template to `{"headers":{"Authorization":"Bearer {{api_key}}"}}` with your key as `api_key`. Nothing will run until both exist.\n\n**Separate quota from the old OpenAI rate-limit saga.** Azure OpenAI is billed and rate-limited independently of the OpenAI account that forced one-company-per-run pacing. Pacing here starts conservative (`delayBetweenBatches: 5000`, `Limit Combos Per Run: 1`) because the real Azure TPM limit for this deployment is unverified — raise `Limit Combos Per Run` gradually after a clean run, watching for errors at each step, rather than assuming headroom.\n\n**Zones and sectors are hand-matched.** `Define Zone And Sector Matrix` pairs each free zone only with sectors it genuinely hosts, then shuffles. DIFC and Dubai Healthcare City are deliberately absent — no overlap with the seven target sectors.\n\n**Scope tests that bite:** discovery rejects names ending in plain LLC (a mainland DED marker) while accepting real free zone suffixes such as DWC-LLC, FZCO and FZE; enrichment requires a +971 phone in a valid UAE shape and writes Not Found otherwise.\n\n**Email required, phone optional.** Dedup keys on email domain, after the filter.\n\n**Sheet writes are RAW.** Do not switch to USER_ENTERED — phone numbers start with `+` and Sheets parses them as formulas.',
   [appendToSheet],
-  { color: 4, position: [0, -40], width: 760, height: 340 }
+  { color: 4, position: [0, -40], width: 820, height: 420 }
 );
 
 export default workflow('dubai-free-zone-company-research', 'Dubai Free Zone Company Research')
