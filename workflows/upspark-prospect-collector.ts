@@ -76,7 +76,8 @@ const pick = node({
   config: { name: 'Pick Next Queries', parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: `
 // Segment x city search plan. Each combination is searched once; the query log records what has been used.
 const PER_RUN = 2;
-const SEGMENTS = ['dental clinic','medical clinic','real estate agency','restaurant','beauty salon','law firm','fitness studio','ecommerce brand','Shopify store','startup','SaaS startup','marketing agency','business consultancy','interior design company','construction company'];
+// Operations-heavy businesses: the natural buyers for workflow automation, system integration and AI
+const SEGMENTS = ['logistics company','freight forwarding company','accounting firm','bookkeeping firm','wholesale distributor','property management company','recruitment agency','insurance broker','manufacturing company','multi-location clinic group'];
 const UAE = ['Dubai','Abu Dhabi','Sharjah'];
 const US = ['New York','Los Angeles','Chicago','Houston','Miami','Austin','Dallas','San Francisco','Seattle','Atlanta'];
 // alternate UAE and US so both countries fill up together
@@ -87,7 +88,7 @@ for (const s of SEGMENTS) {
   const n = Math.max(ae.length, us.length);
   for (let i = 0; i < n; i++) { if (us[i]) plan.push(us[i]); if (ae[i]) plan.push(ae[i]); }
 }
-// interleave segments too, so one run does not spend the whole day on dentists
+// interleave segments too, so one run does not spend the whole day on one industry
 const bySeg = {};
 for (const q of plan) (bySeg[q.segment] = bySeg[q.segment] || []).push(q);
 const order = [];
