@@ -92,11 +92,21 @@ const bySeg = {};
 for (const q of plan) (bySeg[q.segment] = bySeg[q.segment] || []).push(q);
 const order = [];
 for (let i = 0; order.length < plan.length; i++) for (const s of SEGMENTS) if (bySeg[s][i]) order.push(bySeg[s][i]);
-const used = new Set($('Get Query Log').all().map(i => i.json.query_key).filter(Boolean));
+const log = $('Get Query Log').all().map(i => i.json).filter(r => r.query_key);
+// Rate-limit guard (protects Tavily + Azure OpenAI if several runs start at once, e.g. manual + schedule):
+// 1) run lock: if another run claimed queries in the last 20 minutes, this run does nothing
+// 2) daily budget: at most 16 searches (and so at most ~96 AI subject calls) per Dubai day
+const LOCK_MS = 20 * 60 * 1000, DAILY_QUERIES = 16;
+const nowMs = Date.now();
+if (log.some(r => r.claimed_at && nowMs - new Date(r.claimed_at).getTime() < LOCK_MS)) return [];
+const today = $now.setZone('Asia/Dubai').toISODate();
+const usedToday = log.filter(r => r.claimed_at && DateTime.fromISO(new Date(r.claimed_at).toISOString()).setZone('Asia/Dubai').toISODate() === today).length;
+if (usedToday >= DAILY_QUERIES) return [];
+const used = new Set(log.map(r => r.query_key));
 return order
   .map(q => ({ ...q, query_key: q.segment + '|' + q.city }))
   .filter(q => !used.has(q.query_key))
-  .slice(0, PER_RUN)
+  .slice(0, Math.min(PER_RUN, DAILY_QUERIES - usedToday))
   .map(q => ({ json: q }));
 ` } },
   output: [{ query_key: 'dental clinic|Dubai', segment: 'dental clinic', city: 'Dubai', country: 'United Arab Emirates' }]
@@ -364,7 +374,7 @@ const writeSubject = node({
         'An idea for Casa Verde\'s online ordering in Miami\n' +
         'Harbor Realty: turning site visitors into viewings\n' +
         'Quick thought on Northwind Studio\'s mobile site' }] },
-      batching: { batchSize: 2, delayBetweenBatches: 500 }
+      batching: { batchSize: 1, delayBetweenBatches: 1500 }
     },
     subnodes: { model: azureModel }
   },
