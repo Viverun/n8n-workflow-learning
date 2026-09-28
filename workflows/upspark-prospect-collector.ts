@@ -361,19 +361,20 @@ const writeSubject = node({
       promptType: 'define',
       text: expr('Company: {{ $json.company_name }}\nType of business: {{ $json.segment }}\nCity: {{ $json.city }}, {{ $json.country }}\nWhat their website says: {{ $json.about }}\nObservations about their website: {{ $json.hints || "none" }}\n\nWrite the subject line.'),
       messages: { messageValues: [{ type: 'SystemMessagePromptTemplate', message:
-        'You write cold-email subject lines for UpSpark, a web and app development and digital marketing studio (websites, mobile apps, e-commerce stores, booking and sales funnels, social media and paid ads, AI automation).\n\n' +
+        'You write cold-email subject lines for UpSpark, an IT solutions and automation company (workflow automation, system integration, AI assistants and document processing, custom internal software and dashboards).\n\n' +
         'Rules:\n' +
         '- Output ONLY the subject line: one line, no quotes, no label, no emojis.\n' +
         '- It MUST contain the exact company name as given.\n' +
         '- 35 to 70 characters.\n' +
-        '- One specific, relevant hook tied to what they do or where they are (e.g. more bookings, online orders, patient enquiries, leads from Google, a faster mobile site, automating follow-ups). Pick the hook that fits the business; vary the wording and structure between companies.\n' +
-        '- Sound like a human writing to one company: plain, curious, not salesy. No ALL CAPS, no "!", no words like free, guarantee, offer, discount, urgent, act now, 100%.\n' +
+        '- One specific, relevant hook about saving the company\'s team time through automation or better systems, tied to what this type of business does behind the scenes (e.g. scheduling and admin, invoicing, reporting, order processing, lead follow-up, document handling, connecting their tools). Vary wording and structure between companies.\n' +
+        '- Talk about the company\'s operations and team, never about getting them more patients, customers or bookings.\n' +
+        '- Professional, plain and curious, not salesy. No ALL CAPS, no "!", no words like free, guarantee, offer, discount, urgent, act now, 100%.\n' +
         '- Never claim facts you were not given.\n\n' +
         'Examples of the style (do not copy):\n' +
-        'Bright Smile Dental: more online bookings from JLT patients?\n' +
-        'An idea for Casa Verde\'s online ordering in Miami\n' +
-        'Harbor Realty: turning site visitors into viewings\n' +
-        'Quick thought on Northwind Studio\'s mobile site' }] },
+        'Bright Smile Dental: automating the admin behind your front desk\n' +
+        'Idea for Harbor Realty: connecting your listings, CRM and follow-ups\n' +
+        'Casa Verde: less time on invoices and supplier orders\n' +
+        'Northwind Studio: a quick thought on automating client reporting' }] },
       batching: { batchSize: 1, delayBetweenBatches: 1500 }
     },
     subnodes: { model: azureModel }
