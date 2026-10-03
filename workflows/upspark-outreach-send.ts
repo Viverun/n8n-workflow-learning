@@ -26,9 +26,9 @@ const plan = node({
   version: 2,
   config: { name: 'Plan Actions', parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: `
 // send = Yes  -> first time seen: stamp approved_at (the 5-minute grace period starts; switch back to No to cancel)
-//             -> approved_at older than 5 min and not sent yet: send (max 10 per Dubai day, 2 per run)
+//             -> approved_at older than 5 min and not sent yet: send (max 30 per Dubai day, 2 per run)
 // send != Yes -> clear approved_at so a later Yes restarts the 5-minute wait
-const DELAY_MS = 5 * 60 * 1000, DAILY = 10, PER_RUN = 2;
+const DELAY_MS = 5 * 60 * 1000, DAILY = 30, PER_RUN = 2;
 const now = $now.setZone('Asia/Dubai');
 const today = now.toISODate();
 const rows = $input.all().map(i => i.json);
@@ -229,7 +229,7 @@ const markNoMx = node({
 });
 
 const note = sticky(
-  '## Approve & Send: UpSpark Outreach\n\nPick **Yes** in the **send** dropdown. Within a minute the row gets an **approved_at** time; about **5 minutes** later the email is sent (switch back to **No** before then to cancel). **No** or empty = never sent.\n\nMax **10 per day** (Dubai time), 2 per minute. Subject = the row\'s **subject**; body = assets/email/upspark_outreach.html from the repo with the company name filled in. Skips invalid/duplicate emails and domains with no mail server; writes the send time, SKIPPED or ERROR into **sent_at** so a row is never emailed twice. No AI is used here.',
+  '## Approve & Send: UpSpark Outreach\n\nPick **Yes** in the **send** dropdown. Within a minute the row gets an **approved_at** time; about **5 minutes** later the email is sent (switch back to **No** before then to cancel). **No** or empty = never sent.\n\nMax **30 per day** (Dubai time), 2 per minute. Subject = the row\'s **subject**; body = assets/email/upspark_outreach.html from the repo with the company name filled in. Skips invalid/duplicate emails and domains with no mail server; writes the send time, SKIPPED or ERROR into **sent_at** so a row is never emailed twice. No AI is used here.',
   [plan, sendEmail],
   { color: 4 }
 );
