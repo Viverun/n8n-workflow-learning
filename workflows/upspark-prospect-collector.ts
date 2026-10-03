@@ -361,21 +361,7 @@ const writeSubject = node({
     parameters: {
       promptType: 'define',
       text: expr('Company: {{ $json.company_name }}\nType of business: {{ $json.segment }}\nCity: {{ $json.city }}, {{ $json.country }}\nWhat their website says: {{ $json.about }}\nObservations about their website: {{ $json.hints || "none" }}\n\nWrite the subject line.'),
-      messages: { messageValues: [{ type: 'SystemMessagePromptTemplate', message:
-        'You write cold-email subject lines for UpSpark, an IT solutions and automation company (workflow automation, system integration, AI assistants and document processing, custom internal software and dashboards).\n\n' +
-        'Rules:\n' +
-        '- Output ONLY the subject line: one line, no quotes, no label, no emojis.\n' +
-        '- It MUST contain the exact company name as given.\n' +
-        '- 35 to 70 characters.\n' +
-        '- One specific, relevant hook about saving the company\'s team time through automation or better systems, tied to what this type of business does behind the scenes (e.g. scheduling and admin, invoicing, reporting, order processing, lead follow-up, document handling, connecting their tools). Vary wording and structure between companies.\n' +
-        '- Talk about the company\'s operations and team, never about getting them more patients, customers or bookings.\n' +
-        '- Professional, plain and curious, not salesy. No ALL CAPS, no "!", no words like free, guarantee, offer, discount, urgent, act now, 100%.\n' +
-        '- Never claim facts you were not given.\n\n' +
-        'Examples of the style (do not copy):\n' +
-        'Bright Smile Dental: automating the admin behind your front desk\n' +
-        'Idea for Harbor Realty: connecting your listings, CRM and follow-ups\n' +
-        'Casa Verde: less time on invoices and supplier orders\n' +
-        'Northwind Studio: a quick thought on automating client reporting' }] },
+      messages: { messageValues: [{ type: 'SystemMessagePromptTemplate', message: "You write cold-email subject lines for UpSpark, an IT solutions, automation and growth company (workflow automation, system integration, AI solutions, custom software and dashboards, social media packages, marketing email outreach).\n\nRules:\n- Output ONLY the subject line: one line, no quotes, no label, no emojis.\n- It MUST contain the exact company name as given.\n- 40 to 75 characters.\n- Lead with a short, benefit-oriented action phrase, in the style of: \"Grow your business\", \"Automate your workflow\", \"Save hours every week\", \"Scale your outreach\", \"Streamline your operations\", \"Grow your reach online\". Then tie it to the company and one relevant area for this type of business (e.g. invoicing, reporting, shipment updates, tenant requests, candidate follow-ups, policy renewals, order processing, social media, email campaigns).\n- Vary the opening phrase and structure between companies; do not always use the same one.\n- Talk about the company\'s operations, growth and team, never about getting them more patients.\n- Professional and plain, not hype. No ALL CAPS, no \"!\", no words like free, guarantee, offer, discount, urgent, act now, 100%.\n- Never claim facts you were not given.\n\nExamples of the style (do not copy):\nAutomate your workflow at Harbor Logistics: shipment updates on autopilot\nGrow your business, Atlas Accounting: less admin, more clients\nSave hours every week at Crestview Property Management\nScale your outreach, Nova Recruitment: smarter candidate follow-ups\nStreamline operations at Delta Insurance Brokers with automation" }] },
       batching: { batchSize: 1, delayBetweenBatches: 1500 }
     },
     subnodes: { model: azureModel }
