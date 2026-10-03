@@ -75,11 +75,11 @@ const pick = node({
   version: 2,
   config: { name: 'Pick Next Queries', parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: `
 // Segment x city search plan. Each combination is searched once; the query log records what has been used.
-const PER_RUN = 2;
+const PER_RUN = 3;
 // Operations-heavy businesses: the natural buyers for workflow automation, system integration and AI
 const SEGMENTS = ['logistics company','freight forwarding company','accounting firm','bookkeeping firm','wholesale distributor','property management company','recruitment agency','insurance broker','manufacturing company','multi-location clinic group'];
-const UAE = ['Dubai','Abu Dhabi','Sharjah'];
-const US = ['New York','Los Angeles','Chicago','Houston','Miami','Austin','Dallas','San Francisco','Seattle','Atlanta'];
+const UAE = ['Dubai','Abu Dhabi','Sharjah','Ajman','Ras Al Khaimah'];
+const US = ['New York','Los Angeles','Chicago','Houston','Miami','Austin','Dallas','San Francisco','Seattle','Atlanta','Boston','Denver','Phoenix','Philadelphia','San Diego'];
 // alternate UAE and US so both countries fill up together
 const plan = [];
 for (const s of SEGMENTS) {
@@ -96,8 +96,8 @@ for (let i = 0; order.length < plan.length; i++) for (const s of SEGMENTS) if (b
 const log = $('Get Query Log').all().map(i => i.json).filter(r => r.query_key);
 // Rate-limit guard (protects Tavily + Azure OpenAI if several runs start at once, e.g. manual + schedule):
 // 1) run lock: if another run claimed queries in the last 20 minutes, this run does nothing
-// 2) daily budget: at most 16 searches (and so at most ~96 AI subject calls) per Dubai day
-const LOCK_MS = 20 * 60 * 1000, DAILY_QUERIES = 16;
+// 2) daily budget: at most 24 searches (and so at most ~144 AI subject calls) per Dubai day
+const LOCK_MS = 20 * 60 * 1000, DAILY_QUERIES = 24;
 const nowMs = Date.now();
 if (log.some(r => r.claimed_at && nowMs - new Date(r.claimed_at).getTime() < LOCK_MS)) return [];
 const today = $now.setZone('Asia/Dubai').toISODate();
@@ -195,6 +195,8 @@ for (const r of $('Read Prospects Sheet').all().map(i => i.json)) {
   if (r.website) known.add(rootOf(hostOf(r.website) || String(r.website)));
   if (r.email && String(r.email).includes('@')) known.add(rootOf(String(r.email).split('@')[1]));
 }
+const NOT_COMPANY_TITLE = /\\b(directory|directories|listings?|lists?|leads?|database|marketplace|job board|jobs|vacancies|firms in|companies in|agencies in|brokers in|near me|top \\d+|best \\d+|compare|reviews)\\b/i;
+const NOT_COMPANY_HOST = /(^|[.-])(leads?|lists?|directory|jobs?|careers?|hiring|reviews?|compare|finder)([.-]|$)|yellowpages|bizben|openmart|selling\\.com|leadz|leadstal|gulfleads|publicleads|cpalist|drjob/i;
 const PER_QUERY = 6;
 const out = [];
 for (let i = 0; i < queries.length; i++) {
@@ -208,6 +210,8 @@ for (let i = 0; i < queries.length; i++) {
     if (!host || AGG.test(host)) continue;
     // "10 best dentists in Miami" style pages are articles, not a company homepage
     if (/\\b(top|best)\\s+\\d+|\\d+\\s+best\\b|\\blist of\\b|\\branking/i.test(String(x.title || ''))) continue;
+    // directories, lead lists, job boards and "firms in <city>" pages are not companies we can sell to
+    if (NOT_COMPANY_TITLE.test(String(x.title || '')) || NOT_COMPANY_HOST.test(host)) continue;
     const root = rootOf(host);
     if (known.has(root)) continue;
     known.add(root);
@@ -276,7 +280,7 @@ const score = e => {
 const decode = s => String(s || '').replace(/&amp;/g, '&').replace(/&#0?39;|&apos;|&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&#8211;|&ndash;|&#8212;|&mdash;/g, '-').replace(/&#[0-9]+;/g, ' ').replace(/&[a-z]+;/g, ' ');
 const text = h => decode(String(h || '').replace(/<script[\\s\\S]*?<\\/script>|<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\\s+/g, ' ').trim();
 const meta = (h, re) => { const m = String(h || '').match(re); return m ? decode(m[1]).trim() : ''; };
-const UAE_RE = /\\bu\\.?a\\.?e\\b|dubai|abu dhabi|sharjah|ajman|united arab emirates|\\+971|\\b00971/i;
+const UAE_RE = /\\bu\\.?a\\.?e\\b|dubai|abu dhabi|sharjah|ajman|ras al khaimah|united arab emirates|\\+971|\\b00971/i;
 const US_RE = /\\bUSA\\b|United States|\\+1[\\s.(-]*\\d{3}|\\(\\d{3}\\)\\s?\\d{3}-\\d{4}|\\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\\s+\\d{5}\\b/;
 const cleanName = (raw, lab) => {
   let parts = decode(raw).split(/\\s[|\\-:\\u2013\\u2014\\u00b7]\\s|\\s\\|\\s?|\\u2013|\\u2014/).map(s => s.trim()).filter(Boolean);
@@ -316,6 +320,9 @@ for (const s of sites) {
   if (s.country === 'United Arab Emirates') country = isUae ? 'United Arab Emirates' : '';
   else country = isUs && !(/\\.ae$/.test(s.root)) ? 'United States' : (isUae ? 'United Arab Emirates' : '');
   if (!country) continue;
+  // last guard against directory / lead-list sites that slipped through
+  const rawTitle = meta(home, /<title[^>]*>([^<]+)<\\/title>/i);
+  if (/\\b(directory|listings?|leads?|database|job board|jobs|firms in|companies in|near me)\\b/i.test(rawTitle)) continue;
   const name = cleanName(meta(home, /<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)/i), lab)
     || cleanName(meta(home, /<title[^>]*>([^<]+)<\\/title>/i), lab)
     || lab.charAt(0).toUpperCase() + lab.slice(1);
