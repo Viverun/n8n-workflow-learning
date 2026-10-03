@@ -384,10 +384,10 @@ const finalize = node({
 const src = $('Extract Company + Email').all().map(i => i.json);
 const res = $input.all().map(i => i.json);
 const FALLBACK = [
-  n => n + ': a quick idea for your website',
-  n => 'Helping ' + n + ' win more customers online',
-  n => 'A thought on ' + n + "'s online presence",
-  n => n + ': more enquiries from your website?'
+  n => 'Automate your workflow at ' + n,
+  n => 'Grow your business, ' + n + ': less admin, more growth',
+  n => 'Save hours every week at ' + n,
+  n => 'Streamline your operations at ' + n
 ];
 const SPAM = /\\b(free|guarantee|offer|discount|urgent|act now|100%|winner|cash)\\b|!/i;
 return src.map((c, i) => {
