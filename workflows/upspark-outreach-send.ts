@@ -15,6 +15,9 @@ const readSheet = node({
   version: 4.7,
   config: {
     name: 'Read Prospects Sheet',
+    retryOnFail: true,
+    maxTries: 3,
+    waitBetweenTries: 5000,
     parameters: { resource: 'sheet', operation: 'read', documentId: SHEET_DOC, sheetName: SHEET_TAB, options: {} },
     credentials: GSHEETS
   },
@@ -48,7 +51,10 @@ for (const r of rows) {
   }
   if (done) continue;
   if (!approved) { out.push({ json: { action: 'mark', row_number: r.row_number, approved_at: now.toISO(), sent_at: '' } }); continue; }
-  if (Date.now() - Date.parse(approved) < DELAY_MS) continue;
+  const approvedMs = Date.parse(approved);
+  // an edited / unreadable approved_at restarts the 5-minute wait instead of sending straight away
+  if (isNaN(approvedMs)) { out.push({ json: { action: 'mark', row_number: r.row_number, approved_at: now.toISO(), sent_at: '' } }); continue; }
+  if (Date.now() - approvedMs < DELAY_MS) continue;
   const e = String(r.email || '').trim().toLowerCase();
   if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(e)) { out.push({ json: { action: 'mark', row_number: r.row_number, approved_at: approved, sent_at: 'SKIPPED - invalid email' } }); continue; }
   if (sentEmails.has(e) || seen.has(e)) { out.push({ json: { action: 'mark', row_number: r.row_number, approved_at: approved, sent_at: 'SKIPPED - email already sent' } }); continue; }
@@ -56,7 +62,7 @@ for (const r of rows) {
   budget--;
   seen.add(e);
   const company = String(r.company_name || '').trim();
-  const subject = String(r.subject || '').trim() || (company ? company + ': a quick idea for your website' : 'A quick idea for your website');
+  const subject = String(r.subject || '').trim() || (company ? 'Automate your workflow at ' + company : 'Automate your workflow with UpSpark');
   out.push({ json: { action: 'send', row_number: r.row_number, approved_at: approved, email: e, domain: e.split('@')[1], company, subject } });
 }
 return out;
@@ -116,7 +122,10 @@ const checkMx = node({
   config: { name: 'Check Mail Server', parameters: { mode: 'runOnceForEachItem', language: 'javaScript', jsCode: `
 const src = $('Plan Actions').item.json;
 const j = $json || {};
-const ok = j.Status === 0 && Array.isArray(j.Answer) && j.Answer.some(a => a.type === 15 && !/^0 \\.?$/.test(String(a.data).trim()));
+// If the DNS lookup itself failed (service down / timeout) we cannot tell, so try sending:
+// a real bad address comes back as an SMTP error and is marked ERROR, instead of a permanent SKIPPED.
+const lookupFailed = typeof j.Status !== 'number';
+const ok = lookupFailed || (j.Status === 0 && Array.isArray(j.Answer) && j.Answer.some(a => a.type === 15 && !/^0 \\.?$/.test(String(a.data).trim())));
 return { json: { ...src, mx_ok: ok } };
 ` } },
   output: [{ row_number: 2, email: 'info@x.com', company: 'X', subject: 'X: an idea', approved_at: '', mx_ok: true }]
