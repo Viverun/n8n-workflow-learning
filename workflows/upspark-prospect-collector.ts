@@ -91,8 +91,13 @@ for (const s of SEGMENTS) {
 // interleave segments too, so one run does not spend the whole day on one industry
 const bySeg = {};
 for (const q of plan) (bySeg[q.segment] = bySeg[q.segment] || []).push(q);
+const base = [];
+for (let i = 0; base.length < plan.length; i++) for (const s of SEGMENTS) if (bySeg[s][i]) base.push(bySeg[s][i]);
+// When every segment x city has been searched, start a new round with a different wording.
+// Differently worded searches return different companies; companies already in the sheet are skipped later.
+const MODIFIERS = ['', 'small', 'family-owned', 'growing', 'independent', 'local', 'mid-sized', 'established', 'boutique', 'fast-growing'];
 const order = [];
-for (let i = 0; order.length < plan.length; i++) for (const s of SEGMENTS) if (bySeg[s][i]) order.push(bySeg[s][i]);
+for (const m of MODIFIERS) for (const q of base) order.push({ ...q, search_term: m ? m + ' ' + q.segment : q.segment, query_key: q.segment + '|' + q.city + (m ? '|' + m : '') });
 const log = $('Get Query Log').all().map(i => i.json).filter(r => r.query_key);
 // Rate-limit guard (protects Tavily + Azure OpenAI if several runs start at once, e.g. manual + schedule):
 // 1) run lock: if another run claimed queries in the last 20 minutes, this run does nothing
@@ -105,7 +110,6 @@ const usedToday = log.filter(r => r.claimed_at && DateTime.fromISO(new Date(r.cl
 if (usedToday >= DAILY_QUERIES) return [];
 const used = new Set(log.map(r => r.query_key));
 return order
-  .map(q => ({ ...q, query_key: q.segment + '|' + q.city }))
   .filter(q => !used.has(q.query_key))
   .slice(0, Math.min(PER_RUN, DAILY_QUERIES - usedToday))
   .map(q => ({ json: q }));
@@ -167,7 +171,7 @@ const tavily = node({
       sendBody: true,
       contentType: 'json',
       specifyBody: 'json',
-      jsonBody: expr("{{ JSON.stringify({ query: $json.segment + ' in ' + $json.city + ' ' + ($json.country === 'United States' ? 'USA' : 'UAE') + ' official website contact email', max_results: 15, search_depth: 'basic' }) }}"),
+      jsonBody: expr("{{ JSON.stringify({ query: ($json.search_term || $json.segment) + ' in ' + $json.city + ' ' + ($json.country === 'United States' ? 'USA' : 'UAE') + ' official website contact email', max_results: 15, search_depth: 'basic' }) }}"),
       options: { timeout: 30000, batching: { batch: { batchSize: 1, batchInterval: 1000 } } }
     },
     credentials: { httpCustomAuth: { id: 'H0523I2799CH71fw', name: 'Tavily Web Search' } }
@@ -353,8 +357,8 @@ const azureModel = languageModel({
   type: '@n8n/n8n-nodes-langchain.lmChatAzureOpenAi',
   version: 1,
   config: {
-    name: 'Azure GPT-5 Mini',
-    parameters: { model: 'gpt-5-mini', options: { timeout: 60000, maxRetries: 5 } },
+    name: 'Azure GPT-6 Luna',
+    parameters: { model: 'gpt-6-luna', options: { timeout: 60000, maxRetries: 5 } },
     credentials: { azureOpenAiApi: { id: 'RlTrqkjqaMvSzEIK', name: 'Azure Open AI account' } }
   }
 });
