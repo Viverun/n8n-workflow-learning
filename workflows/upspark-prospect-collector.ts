@@ -353,13 +353,13 @@ return out;
   output: [{ company_name: 'X Dental', country: 'United Arab Emirates', email: 'info@x.com', website: 'https://x.com', segment: 'dental clinic', city: 'Dubai', about: 'Family dental care in JLT', hints: '' }]
 });
 
-const azureModel = languageModel({
-  type: '@n8n/n8n-nodes-langchain.lmChatAzureOpenAi',
-  version: 1,
+const openAiModel = languageModel({
+  type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+  version: 1.3,
   config: {
-    name: 'Azure GPT-6 Luna',
-    parameters: { model: 'gpt-6-luna', options: { timeout: 60000, maxRetries: 5 } },
-    credentials: { azureOpenAiApi: { id: 'RlTrqkjqaMvSzEIK', name: 'Azure Open AI account' } }
+    name: 'OpenAI GPT-6 Luna',
+    parameters: { model: { __rl: true, mode: 'list', value: 'gpt-6-luna', cachedResultName: 'gpt-6-luna' }, options: { timeout: 60000, maxRetries: 5 } },
+    credentials: { openAiApi: { id: 'LcSKl7EB0pYld3oq', name: 'OpenAI account' } }
   }
 });
 
@@ -375,7 +375,7 @@ const writeSubject = node({
       messages: { messageValues: [{ type: 'SystemMessagePromptTemplate', message: "You write cold-email subject lines for UpSpark, an IT solutions, automation and growth company (workflow automation, system integration, AI solutions, custom software and dashboards, social media packages, marketing email outreach).\n\nRules:\n- Output ONLY the subject line: one line, no quotes, no label, no emojis.\n- It MUST contain the exact company name as given.\n- 40 to 75 characters.\n- Lead with a short, benefit-oriented action phrase, in the style of: \"Grow your business\", \"Automate your workflow\", \"Save hours every week\", \"Scale your outreach\", \"Streamline your operations\", \"Grow your reach online\". Then tie it to the company and one relevant area for this type of business (e.g. invoicing, reporting, shipment updates, tenant requests, candidate follow-ups, policy renewals, order processing, social media, email campaigns).\n- Vary the opening phrase and structure between companies; do not always use the same one.\n- Talk about the company\'s operations, growth and team, never about getting them more patients.\n- Professional and plain, not hype. No ALL CAPS, no \"!\", no words like free, guarantee, offer, discount, urgent, act now, 100%.\n- Never claim facts you were not given.\n\nExamples of the style (do not copy):\nAutomate your workflow at Harbor Logistics: shipment updates on autopilot\nGrow your business, Atlas Accounting: less admin, more clients\nSave hours every week at Crestview Property Management\nScale your outreach, Nova Recruitment: smarter candidate follow-ups\nStreamline operations at Delta Insurance Brokers with automation" }] },
       batching: { batchSize: 1, delayBetweenBatches: 1500 }
     },
-    subnodes: { model: azureModel }
+    subnodes: { model: openAiModel }
   },
   output: [{ text: 'X Dental: more online bookings from JLT patients?' }]
 });
