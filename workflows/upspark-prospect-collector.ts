@@ -358,7 +358,7 @@ const openAiModel = languageModel({
   version: 1.3,
   config: {
     name: 'OpenAI GPT-6 Luna',
-    parameters: { model: { __rl: true, mode: 'list', value: 'gpt-6-luna', cachedResultName: 'gpt-6-luna' }, options: { timeout: 60000, maxRetries: 5, extraBody: '{"reasoning": {"effort": "low"}}' } },
+    parameters: { model: { __rl: true, mode: 'list', value: 'gpt-6-luna', cachedResultName: 'gpt-6-luna' }, options: { timeout: 60000, maxRetries: 5, extraBody: '{"reasoning": {"effort": "medium"}}' } },
     credentials: { openAiApi: { id: 'LcSKl7EB0pYld3oq', name: 'OpenAI account' } }
   }
 });
